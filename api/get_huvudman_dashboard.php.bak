@@ -1,0 +1,107 @@
+<?php
+// api/get_huvudman_dashboard.php
+require_once('auth_check.php');
+require_once('db_connect.php');
+$pdo = get_db_connection(); 
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-cache, must-revalidate');
+
+$pnr = isset($_GET['pnr']) ? trim($_GET['pnr']) : '';
+if ($pnr === '') {
+  http_response_code(400);
+  echo json_encode(['error' => 'Inget personnummer angivet.']);
+  exit;
+}
+
+// Helper: check if a table exists (SQLite)
+function table_exists(PDO $pdo, string $name): bool {
+  $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type='table' AND lower(name)=lower(?) LIMIT 1");
+  $stmt->execute([$name]);
+  return (bool)$stmt->fetchColumn();
+}
+
+try {
+  // --- 1) Huvudman-detaljer ---
+  $stmt = $pdo->prepare("SELECT * FROM huvudman WHERE Personnummer = ? LIMIT 1");
+  $stmt->execute([$pnr]);
+  $details = $stmt->fetch(PDO::FETCH_ASSOC);
+
+  if (!$details) {
+    http_response_code(404);
+    echo json_encode(['error' => 'Huvudman hittades inte.']);
+    exit;
+  }
+
+  // --- 1b) Berika med Overförmyndare-data om vi har ett ID + tabellen finns ---
+  if (!empty($details['OVERFORMYNDAR_ID']) && table_exists($pdo, 'Overformyndare')) {
+    $stmtOfn = $pdo->prepare("SELECT * FROM Overformyndare WHERE ID = ? LIMIT 1");
+    $stmtOfn->execute([$details['OVERFORMYNDAR_ID']]);
+    if ($ofn = $stmtOfn->fetch(PDO::FETCH_ASSOC)) {
+      // Behåll originalkolumner
+      $details['OVERFORMYNDAR_NAMN'] = $ofn['Namn'] ?? ($details['OVERFORMYNDAR_NAMN'] ?? null);
+      $details['OVERFORMYNDAR_TELEFON'] = $ofn['Telefon'] ?? ($details['OVERFORMYNDAR_TELEFON'] ?? null);
+      $details['OVERFORMYNDAR_EPOST'] = $ofn['Epost'] ?? ($details['OVERFORMYNDAR_EPOST'] ?? null);
+      $details['OVERFORMYNDAR_KOMMUN_VAXEL'] = $ofn['KOMMUN_VAXEL'] ?? ($details['OVERFORMYNDAR_KOMMUN_VAXEL'] ?? null);
+
+      // Lägg även camelCase alias som din frontend ofta läser via getCaseInsensitive:
+      $details['OverformyndareNamn']        = $details['OVERFORMYNDAR_NAMN'];
+      $details['OverformyndareTelefon']     = $details['OVERFORMYNDAR_TELEFON'];
+      $details['OverformyndareEpost']       = $details['OVERFORMYNDAR_EPOST'];
+      $details['OverformyndareKommunVaxel'] = $details['OVERFORMYNDAR_KOMMUN_VAXEL'];
+    }
+  } else {
+    // Om DB:n redan har textfält med namnet för OFN i huvudman-tabellen, exponera camelCase alias
+    if (!empty($details['OVERFORMYNDAR_NAMN']))        $details['OverformyndareNamn']        = $details['OVERFORMYNDAR_NAMN'];
+    if (!empty($details['OVERFORMYNDAR_TELEFON']))     $details['OverformyndareTelefon']     = $details['OVERFORMYNDAR_TELEFON'];
+    if (!empty($details['OVERFORMYNDAR_EPOST']))       $details['OverformyndareEpost']       = $details['OVERFORMYNDAR_EPOST'];
+    if (!empty($details['OVERFORMYNDAR_KOMMUN_VAXEL']))$details['OverformyndareKommunVaxel'] = $details['OVERFORMYNDAR_KOMMUN_VAXEL'];
+  }
+
+  $response = ['details' => $details];
+
+  // --- 2) Dokument (prova kända tabellnamn) ---
+  $response['documents'] = [];
+  $docTables = [
+    'huvudman_dokument',
+    'HuvudmanDokument',
+    'DokumentArkiv',
+    'dokumentarkiv'
+  ];
+  foreach ($docTables as $cand) {
+    if (table_exists($pdo, $cand)) {
+      // Vanliga kolumnnamn jag sett i ditt projekt: ID, PERSONNUMMER, DokumentTyp, OriginalFilnamn, StoredPath
+      $sqlDoc = "SELECT * FROM $cand WHERE PERSONNUMMER = ? ORDER BY ID DESC";
+      $stmt2 = $pdo->prepare($sqlDoc);
+      $stmt2->execute([$pnr]);
+      $docs = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+      // För säkerhets skull: bygg ett StoredPath om tabellen inte har ett
+      foreach ($docs as &$d) {
+        if (empty($d['StoredPath']) && !empty($d['OriginalFilnamn'])) {
+          // Anpassa denna basväg till din serverstruktur om den skiljer sig
+          $d['StoredPath'] = '/dokument_arkiv/' . $d['OriginalFilnamn'];
+        }
+      }
+      unset($d);
+
+      $response['documents'] = $docs;
+      break;
+    }
+  }
+
+  // --- 3) Bankkonton (om tabell finns) ---
+  $response['bankkonton'] = [];
+  foreach (['HuvudmanBankkonton','huvudman_bankkonton'] as $cand) {
+    if (table_exists($pdo, $cand)) {
+      $stmt3 = $pdo->prepare("SELECT * FROM $cand WHERE HuvudmanPnr = ? ORDER BY RadNr");
+      $stmt3->execute([$pnr]);
+      $response['bankkonton'] = $stmt3->fetchAll(PDO::FETCH_ASSOC);
+      break;
+    }
+  }
+
+  echo json_encode($response, JSON_UNESCAPED_UNICODE);
+} catch (Throwable $e) {
+  http_response_code(500);
+  echo json_encode(['error' => 'Databasfel: '.$e->getMessage()]);
+}
