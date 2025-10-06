@@ -1613,7 +1613,7 @@ require_once('api/auth_check.php');
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
-	<script type="module" src="/js/main.js"></script>
+	<script type="module" src="/js/main.js?v=<?php echo time(); ?>"></script>
 	<!-- Gamla monoliten: avaktiverad -->
 	<!-- <script src="godman_logic.js?v=<?php echo time(); ?>"></script> -->
 </body>
