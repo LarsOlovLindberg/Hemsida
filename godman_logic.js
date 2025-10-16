@@ -24,9 +24,20 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   });
-});
+});// Definiera bara en gång (idempotent) för att undvika "already been declared"
+window.FS_TEMPLATE_IDS_BY_NAME = window.FS_TEMPLATE_IDS_BY_NAME || {
+  "Upplands Väsby":  2,
+  "Järfälla Kommun": 3,
+  "Sigtuna Kommun":  4,
+  "Solna Stad":      5,
+  "Stockholm Stad":  6
+};
+
 
 // Din befintliga kod börjar här...
+// ⚠️ INITIALIZATION GUARD - förhindrar dubbelregistrering av event listeners
+let appInitialized = false;
+
 let currentHuvudmanFullData = null;
 let allGodManProfiler = [];
 let activeGodManProfile = null;
@@ -175,6 +186,19 @@ const KATEGORI_POSTKOD_MAP = {
   OVERFORINGEGET_UT: { namn: "Överföringar eget konto", pdfBase: "Utgift_Overforing" },
   OVRIG_UTGIFT: { namn: "Övriga utgifter", pdfBase: "Utgift_Ovrig" },
 };
+
+// (Valfri fallback) Mallfilnamn -> templateId
+window.FS_TEMPLATE_IDS_BY_FILE = window.FS_TEMPLATE_IDS_BY_FILE || {
+  "Ansokan_Upplands_Vasby.pdf": 2,
+  "Ansokan_Jarfalla.pdf":       3,
+  "Ansokan_Sigtuna.pdf":        4,
+  "Ansokan_Solna.pdf":          5,
+  "Ansokan_Stockholm.pdf":      6,
+};
+
+
+// Global state (som dina övriga currentFs* variabler)
+let currentFsTemplateId = null;
 
 // --- API endpoints (matchar dina faktiska PHP-filer) ---
 const API = {
@@ -1069,15 +1093,11 @@ async function handleTemplateFileSelect(event) {
 /**
  * Renderar tabellen där PDF-fält kopplas till databaskolumner.
  *
- * @param {string[]} pdfFields                      – fältnamn funna i PDF
- * @param {Array<{PdfFieldName:string, DbColumnName:string}>}
- *        [maybeSavedMappings]                      – frivilligt; kan ligga
- *                                                   på position 2 eller 3
+ * @param {string[]} pdfFields
+ * @param {Array<{PdfFieldName:string, DbColumnName:string}>} [maybeSavedMappings]
  */
 async function renderMappingTable(pdfFields, maybeSavedMappings) {
-  /* -------------------------------------------------------
-       0.   Rensa och lokalisera målbehållare
-    --------------------------------------------------------*/
+  // 0) Rensa målbehållare
   const containerDiv = document.getElementById("mappingTableContainer");
   const tbodyElm = document.querySelector("#pdfFieldMappingTable tbody");
 
@@ -1088,39 +1108,25 @@ async function renderMappingTable(pdfFields, maybeSavedMappings) {
   if (containerDiv) containerDiv.innerHTML = "";
   if (tbodyElm) tbodyElm.innerHTML = "";
 
-  /* -------------------------------------------------------
-       1.   Tolka ev. andra/tredje argumentet som savedMappings
-    --------------------------------------------------------*/
+  // 1) Saved mappings
   let savedMappings = [];
-  // Om det andra argumentet är en array av objekt á la [{PdfFieldName, DbColumnName}]
   if (Array.isArray(maybeSavedMappings) && maybeSavedMappings.length && maybeSavedMappings[0].PdfFieldName) {
     savedMappings = maybeSavedMappings;
   }
-  // Om funktionen ändå råkar anropas med tre argument (gamla koden)
   if (arguments.length === 3 && Array.isArray(arguments[2])) {
     savedMappings = arguments[2];
   }
   const mappingLookup = new Map(savedMappings.map(m => [m.PdfFieldName, m.DbColumnName]));
 
-  /* -------------------------------------------------------
-       2.   Hämta och normalisera DB-kolumnerna
-    --------------------------------------------------------*/
+  // 2) DB-kolumner
   let categorized = {};
   try {
     const res = await fetch("api/get_db_columns.php");
-
     let data = await res.json();
+    if (data && typeof data === "object" && "data" in data) data = data.data;
 
-    // Hantera möjliga omslag, t.ex. { success:true, data: [...] }
-    if (data && typeof data === "object" && "data" in data) {
-      data = data.data;
-    }
-
-    // 2a) Om redan kategoriserat objekt: { huvudman:[...], godman:[...] }
     if (!Array.isArray(data) && typeof data === "object") {
       categorized = data;
-
-      // 2b) Om platt array: ["huvudman.Fornamn", "godman.Efternamn", ...]
     } else if (Array.isArray(data)) {
       data.forEach(col => {
         const [cat] = col.split(".");
@@ -1135,13 +1141,10 @@ async function renderMappingTable(pdfFields, maybeSavedMappings) {
     return;
   }
 
-  /* -------------------------------------------------------
-       3.   Bygg en gemensam <option>-HTML-sträng
-    --------------------------------------------------------*/
+  // 3) Options
   let optionsHtml = '<option value="">-- Koppla inte --</option>';
   for (const category in categorized) {
     if (!categorized[category].length) continue;
-
     optionsHtml += `<optgroup label="${category}">`;
     categorized[category].forEach(fullName => {
       const label = fullName.split(".").pop();
@@ -1150,16 +1153,13 @@ async function renderMappingTable(pdfFields, maybeSavedMappings) {
     optionsHtml += "</optgroup>";
   }
 
-  /* -------------------------------------------------------
-       4.   Sortera PDF-fälten
-    --------------------------------------------------------*/
+  // 4) Sortera PDF-fälten
   pdfFields = [...new Set(pdfFields)].sort((a, b) => a.localeCompare(b));
 
-  /* -------------------------------------------------------
-       5.   Skriv rader beroende på layout
-    --------------------------------------------------------*/
+  // 5) Skriv rader
   const writeRow = targetTbody => fld => {
     const tr = document.createElement("tr");
+
     const tdPdf = document.createElement("td");
     tdPdf.textContent = fld;
 
@@ -1176,23 +1176,73 @@ async function renderMappingTable(pdfFields, maybeSavedMappings) {
     targetTbody.appendChild(tr);
   };
 
-  // Layout 1: containerDiv → skapa nytt <table><tbody>
+  let tableForPreselect = null;
+
+  // Layout 1: containerDiv -> skapa ny tabell
   if (containerDiv) {
     const table = document.createElement("table");
     table.innerHTML = `
-            <thead>
-                <tr><th>PDF-fält</th><th>Datakälla</th></tr>
-            </thead>`;
+      <thead>
+        <tr><th>PDF-fält</th><th>Datakälla</th></tr>
+      </thead>`;
     const tbody = document.createElement("tbody");
     pdfFields.forEach(writeRow(tbody));
     table.appendChild(tbody);
     containerDiv.appendChild(table);
+    tableForPreselect = table;
   }
 
-  // Layout 2: already-existing tbodyElm
+  // Layout 2: redan befintlig <tbody>
   if (tbodyElm) {
     pdfFields.forEach(writeRow(tbodyElm));
+    tableForPreselect = tbodyElm.closest("table") || tbodyElm.parentElement;
   }
+
+  // 🚀 Förvälj standard för Upplands Väsby efter att raderna finns
+  if (tableForPreselect) preselectDefaultsForUV(tableForPreselect);
+}
+
+// 🔧 Default-mappning (OBS: fältnamn exakt som i PDF)
+const UPPLANDS_VASBY_DEFAULT_MAPPING = {
+  kommunHandlaggare: "OVERFORMYNDARE_ID",
+  personnummer: "PERSONNUMMER",
+  // "heltNamn#0" lämnar vi TOMT här (kombineras i genereringen: FORNAMN + ' ' + EFTERNAMN)
+  medsokandePersonnummer: "MEDSOKANDE_PERSONNUMMER",
+  medsokandeFornamn: "MEDSOKANDE_FORNAMN",
+  medsokandeEfternamn: "MEDSOKANDE_EFTERNAMN",
+  adress: "ADRESS",
+  postnummer: "POSTNUMMER",
+  ort: "ORT",
+  bostadAntalrum: "BOSTAD_ANTAL_RUM",
+  bostadAntalBoende: "BOSTAD_ANTAL_BOENDE",
+  boendeNamn: "BOENDE_NAMN",
+  sysselsattning: "SYSSELSATTNING",
+  ovrigaUpplysningar: "ARSR_OVRIGA_UPPLYSNINGAR",
+  hyra: "HYRA",
+  bredband: "BREDBAND",
+  fackAvgiftAkassa: "FACK_AVGIFT_AKASSA",
+  hemforsakring: "HEMFORSAKRING",
+  reskostnader: "RESKOSTNADER",
+  elKostnad: "EL_KOSTNAD",
+  medicinkostnad: "MEDICIN_KOSTNAD",
+  lakarvardskostnad: "LAKARVARDSKOSTNAD",
+  barnomsorgAvgift: "BARNOMSORG_AVGIFT",
+  fardtjanstAvgift: "FARDTJANST_AVGIFT",
+  ovrigKostnadBeskrivning: "OVRIG_KOSTNAD_BESKRIVNING",
+  ovrigKostnadBelopp: "OVRIG_KOSTNAD_BELOPP",
+  datum: "DAGENS_DATUM",
+  "gm.heltNamn": "GODMAN_NAMN",         // 👈 exakt pdf-fältnamn
+  manad: "MANAD",
+  "Bank_Sökande": "Bank_Sökande",
+  "Clearingnummer_Sökande": "Clearingnummer_Sökande",
+  "Kontonummer_Sökande": "Kontonummer_Sökande"
+};
+
+function preselectDefaultsForUV(tableEl) {
+  tableEl.querySelectorAll("select").forEach(sel => {
+    const def = UPPLANDS_VASBY_DEFAULT_MAPPING[sel.dataset.pdfField];
+    if (def && !sel.value) sel.value = def;
+  });
 }
 
 /**
@@ -1438,7 +1488,10 @@ function setupEventListeners() {
         collectAndSaveRedogorelseData();
         break;
     }
+
   });
+  
+
   console.log("[EventListeners] Global event delegation är nu aktiv på document.body.");
 }
 
@@ -2017,9 +2070,7 @@ function collectHuvudmanFullDetailsFromForm() {
     return null;
   }
 
-  // Börja med en tom mall för att säkerställa att vi bara skickar det som finns i formuläret
-  const baseHmDetails = {};
-
+  // --- Hjälpare: definiera FÖRST ---
   const getVal = (
     id,
     isCheckbox = false,
@@ -2029,31 +2080,35 @@ function collectHuvudmanFullDetailsFromForm() {
     isSelectInt = false
   ) => {
     const el = document.getElementById(id);
-    if (!el) {
-      return null;
-    }
+    if (!el) return null;
+
     if (isRadioName) {
       const radioChecked = document.querySelector(`input[name="${isRadioName}"]:checked`);
       if (!radioChecked) return null;
       return isNumeric ? parseInt(radioChecked.value) : radioChecked.value;
     }
     if (isCheckbox) return el.checked ? 1 : 0;
-    if (isSelectInt) {
-      return el.value === "" ? null : parseInt(el.value);
-    }
+
+    if (isSelectInt) return el.value === "" ? null : parseInt(el.value);
+
     if (el.tagName === "SELECT" && !isSelectInt) {
       return el.value.trim() === "" ? null : el.value.trim();
     }
+
     if (isNumeric) {
       const valStr = String(el.value).replace(",", ".");
       if (valStr.trim() === "") return null;
       const val = isFloat ? parseFloat(valStr) : parseInt(valStr);
       return isNaN(val) ? null : val;
     }
+
     return el.value.trim() === "" ? null : el.value.trim();
   };
 
-  // --- Grunduppgifter & Kontakt (med VERSALER) ---
+  // --- Samling av data ---
+  const baseHmDetails = {};
+
+  // Grunduppgifter & Kontakt (VERSALER)
   baseHmDetails.FORNAMN = getVal("fornamn");
   baseHmDetails.EFTERNAMN = getVal("efternamn");
   baseHmDetails.ADRESS = getVal("adress");
@@ -2068,7 +2123,7 @@ function collectHuvudmanFullDetailsFromForm() {
   baseHmDetails.FORORDNANDE_DATUM = getVal("forordnandeDatum");
   baseHmDetails.SALDO_RAKNINGSKONTO_FORORDNANDE = getVal("saldoRakningskontoForordnande", false, null, true, true);
 
-  // --- Medsökande (med VERSALER och understreck) ---
+  // Medsökande
   if (baseHmDetails.SAMMANBOENDE === 1) {
     baseHmDetails.MEDSOKANDE_FORNAMN = getVal("medsokandeFornamn");
     baseHmDetails.MEDSOKANDE_EFTERNAMN = getVal("medsokandeEfternamn");
@@ -2078,40 +2133,21 @@ function collectHuvudmanFullDetailsFromForm() {
     baseHmDetails.MEDSOKANDE_SYSSELSATTNING = getVal("medsokandeSysselsattning");
   }
 
-  // --- Vistelse, ÖF & Bank (med VERSALER) ---
+  // Vistelse, ÖF & Bank
   baseHmDetails.VISTELSEADRESS = getVal("vistelseadress");
   baseHmDetails.VISTELSEPOSTNR = getVal("vistelsepostnr");
   baseHmDetails.VISTELSEORT = getVal("vistelseort");
-  baseHmDetails.OVERFORMYNDARE_ID = getVal("overformyndareSelect");
+  baseHmDetails.OVERFORMYNDARE_ID = getVal("overformyndareSelect", false, null, false, false, true);
   baseHmDetails.BANKNAMN = getVal("banknamn");
   baseHmDetails.CLEARINGNUMMER = getVal("clearingnummer");
   baseHmDetails.KONTONUMMER = getVal("kontonummer");
 
-  // --- Boende, Sysselsättning & Ekonomi (med VERSALER) ---
-  baseHmDetails.BOENDE_NAMN = getVal("boendeNamn");
-  baseHmDetails.BOSTAD_TYP = getVal("bostadTyp");
-  baseHmDetails.BOSTAD_ANTAL_RUM = getVal("bostadAntalRum", false, null, true);
-  baseHmDetails.BOSTAD_ANTAL_BOENDE = getVal("bostadAntalBoende", false, null, true);
-  baseHmDetails.BOSTAD_KONTRAKTSTID = getVal("bostadKontraktstid");
-  baseHmDetails.SYSSELSATTNING = getVal("sysselsattning");
-  baseHmDetails.INKOMSTTYP = getVal("inkomsttyp");
-  baseHmDetails.DEKLARERAT_STATUS = getVal("deklareratStatus");
-  baseHmDetails.ARVODE_UTBETALT_STATUS = getVal("arvodeUtbetaltStatus", false, null, false, false, true);
-  baseHmDetails.MERKOSTNADSERSTATTNING_STATUS = getVal("merkostnadsersattningStatus", false, null, false, false, true);
-  baseHmDetails.ARSR_OVRIGA_UPPLYSNINGAR = getVal("arsrOvrigaUpplysningar");
-  baseHmDetails.ERSATTNING_ANNAN_MYNDIGHET_STATUS = getVal(
-    "ersattningAnnanMyndighetStatus",
-    false,
-    null,
-    false,
-    false,
-    true
-  );
-  baseHmDetails.ERSATTNING_ANNAN_MYNDIGHET_FRAN = getVal("ersattningAnnanMyndighetFran");
-  baseHmDetails.HANDLAGGARE = getVal("handlaggare");
+  // Generella Kostnader & Inkomster (VERSALER)
+  // HYRA: primärt från Generella kostnader (#hyra), sekundärt från dashboard (#ov-HYRA)
+  const hyraPrim = getVal("hyra", false, null, true, true);
+  const hyraAlt  = getVal("ov-HYRA", false, null, true, true);
+  baseHmDetails.HYRA = hyraPrim ?? hyraAlt ?? null;
 
-  // --- Generella Kostnader & Inkomster (med VERSALER) ---
-  baseHmDetails.HYRA = getVal("hyra", false, null, true, true);
   baseHmDetails.EL_KOSTNAD = getVal("elKostnad", false, null, true, true);
   baseHmDetails.FACK_AVGIFT_AKASSA = getVal("fackAvgiftAkassa", false, null, true, true);
   baseHmDetails.RESKOSTNADER = getVal("reskostnader", false, null, true, true);
@@ -2136,31 +2172,19 @@ function collectHuvudmanFullDetailsFromForm() {
   baseHmDetails.SJUKPENNING_FORALDRAPENNING = getVal("sjukpenningForaldrapenning", false, null, true, true);
   baseHmDetails.SKATTEATERBARING = getVal("skatteaterbaring", false, null, true, true);
   baseHmDetails.STUDIEMEDEL = getVal("studiemedel", false, null, true, true);
-  baseHmDetails.UNDERHALLSSTOD_EFTERLEVANDEPENSION = getVal(
-    "underhallsstodEfterlevandepension",
-    false,
-    null,
-    true,
-    true
-  );
+  baseHmDetails.UNDERHALLSSTOD_EFTERLEVANDEPENSION = getVal("underhallsstodEfterlevandepension", false, null, true, true);
   baseHmDetails.VANTAD_INKOMST_BESKRIVNING = getVal("vantadInkomstBeskrivning");
   baseHmDetails.VANTAD_INKOMST_BELOPP = getVal("vantadInkomstBelopp", false, null, true, true);
   baseHmDetails.OVRIG_INKOMST_BESKRIVNING = getVal("ovrigInkomstBeskrivning");
   baseHmDetails.OVRIG_INKOMST_BELOPP = getVal("ovrigInkomstBelopp", false, null, true, true);
 
-  // --- Generella Tillgångar & Skulder (med VERSALER) ---
+  // Generella Tillgångar & Skulder
   baseHmDetails.TILLGANG_BANKMEDEL_VARDE = getVal("tillgangBankmedelVarde", false, null, true, true);
-  baseHmDetails.TILLGANG_BOSTADSRATT_FASTIGHET_VARDE = getVal(
-    "tillgangBostadsrattFastighetVarde",
-    false,
-    null,
-    true,
-    true
-  );
+  baseHmDetails.TILLGANG_BOSTADSRATT_FASTIGHET_VARDE = getVal("tillgangBostadsrattFastighetVarde", false, null, true, true);
   baseHmDetails.TILLGANG_FORDON_MM_VARDE = getVal("tillgangFordonMmVarde", false, null, true, true);
   baseHmDetails.SKULD_KFM_VARDE = getVal("skuldKfmVarde", false, null, true, true);
 
-  // --- Dashboard-budget (med korrekt skiftläge från databasen) ---
+  // Dashboard-budget (ingen överskrivning av HYRA här!)
   baseHmDetails.KontaktpersonNamn = getVal("ov-KontaktpersonNamn");
   baseHmDetails.KontaktpersonTel = getVal("ov-KontaktpersonTel");
   baseHmDetails.BoendeKontaktpersonNamn = getVal("ov-BoendeKontaktpersonNamn");
@@ -2168,6 +2192,7 @@ function collectHuvudmanFullDetailsFromForm() {
   baseHmDetails.PensionLeverantor = getVal("ov-PensionLeverantor");
   baseHmDetails.BostadsbidragLeverantor = getVal("ov-BostadsbidragLeverantor");
   baseHmDetails.HyraLeverantor = getVal("ov-HyraLeverantor");
+  // baseHmDetails.HYRA = getVal("ov-HYRA", false, null, true, true); // LÅT VARA AVSTÄNGD
   baseHmDetails.Omsorgsavgiftleverantor = getVal("ov-OmsorgsavgiftLeverantor");
   baseHmDetails.ElLeverantor = getVal("ov-ElLeverantor");
   baseHmDetails.HemforsakringLeverantor = getVal("ov-HemforsakringLeverantor");
@@ -2183,7 +2208,7 @@ function collectHuvudmanFullDetailsFromForm() {
   baseHmDetails.FickpengFredag = getVal("ov-FickpengFredag", false, null, true, true);
   baseHmDetails.FickpengTotalVecka = getVal("ov-FickpengTotalVecka", false, null, true, true);
 
-  // Samla in data från dynamiska listor
+  // Dynamiska listor
   const dataToReturn = {
     details: baseHmDetails,
     bankkontonStart: collectDynamicListData("hmBankkontonStartContainer", [
@@ -2218,6 +2243,7 @@ function collectHuvudmanFullDetailsFromForm() {
   console.log("[COLLECT] Data som samlats in från formulär (inkl. listor):", JSON.parse(JSON.stringify(dataToReturn)));
   return dataToReturn;
 }
+
 
 function clearHuvudmanDetailsForm() {
   const formIdsToClearValue = [
@@ -2355,73 +2381,6 @@ function clearHuvudmanDetailsForm() {
   collapsibleContents.forEach(content => content.classList.add("hidden-content"));
   const collapsibleHeaders = document.querySelectorAll("#huvudmanDetailsContainer .collapsible-header");
   collapsibleHeaders.forEach(header => header.classList.remove("active"));
-}
-// ========================================================================
-// FELSÖKNINGSVERSION AV scrollToSection - ANVÄND DENNA!
-// ========================================================================
-function scrollToSection(sectionId) {
-  console.log(`\n--- [Scroll Debug] Startar för sektion: ${sectionId} ---`);
-
-  const targetSection = document.getElementById(sectionId);
-  if (!targetSection) {
-    console.error(`[Scroll Debug] FEL: Sektion med ID '${sectionId}' hittades inte.`);
-    return;
-  }
-
-  const targetHeader = targetSection.querySelector(".collapsible-header");
-  if (!targetHeader) {
-    console.error(`[Scroll Debug] FEL: Rubrik för sektion '${sectionId}' hittades inte.`);
-    return;
-  }
-
-  const scrollContainer = document.querySelector(".content-area");
-  if (!scrollContainer) {
-    console.error("[Scroll Debug] FEL: Scroll-container '.content-area' hittades inte!");
-    return;
-  }
-
-  setTimeout(() => {
-    console.log("[Scroll Debug] Inuti setTimeout (efter 100ms)...");
-
-    const subHeader = document.getElementById("huvudmanActionSubHeader");
-    const subHeaderHeight = subHeader && getComputedStyle(subHeader).display !== "none" ? subHeader.offsetHeight : 0;
-    console.log(`[Scroll Debug] Sticky Sub-Header Höjd: ${subHeaderHeight}px`);
-
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const headerRect = targetHeader.getBoundingClientRect();
-    const currentScrollTop = scrollContainer.scrollTop;
-
-    console.log(`[Scroll Debug] Container (content-area) top: ${containerRect.top.toFixed(2)}px från viewport-topp`);
-    console.log(`[Scroll Debug] Sektionsrubrik top: ${headerRect.top.toFixed(2)}px från viewport-topp`);
-    console.log(`[Scroll Debug] Container nuvarande scroll-position: ${currentScrollTop.toFixed(2)}px`);
-
-    // Beräkna den absoluta positionen för rubriken inuti det scrollbara området
-    const absoluteHeaderPosition = headerRect.top - containerRect.top + currentScrollTop;
-    console.log(
-      `[Scroll Debug] Beräknad absolut rubrikposition: (${headerRect.top.toFixed(2)} - ${containerRect.top.toFixed(
-        2
-      )}) + ${currentScrollTop.toFixed(2)} = ${absoluteHeaderPosition.toFixed(2)}px`
-    );
-
-    // Den slutgiltiga scroll-positionen är rubrikens position minus höjden på sub-headern,
-    // plus en liten marginal för att det inte ska ligga kloss an.
-    const finalScrollPosition = absoluteHeaderPosition - subHeaderHeight - 15; // 15px marginal
-    console.log(
-      `[Scroll Debug] SLUTLIG MÅLPOSITION: ${absoluteHeaderPosition.toFixed(
-        2
-      )} - ${subHeaderHeight} - 15 = ${finalScrollPosition.toFixed(2)}px`
-    );
-
-    // Utför scrollningen
-    scrollContainer.scrollTo({
-      top: finalScrollPosition,
-      // Vi tar bort 'smooth' TILLFÄLLIGT för att se om det är den som är problemet
-      // behavior: 'smooth'
-    });
-
-    console.log(`[Scroll Debug] scrollContainer.scrollTo(${finalScrollPosition.toFixed(2)}) har anropats.`);
-    console.log("--- [Scroll Debug] Avslutat. ---");
-  }, 100);
 }
 
 async function promptDeleteHuvudman() {
@@ -3938,66 +3897,6 @@ function identifyBank(dataRows) {
   return "Generisk_CSV";
 }
 // --- HJÄLPAKTÖRER FÖR Datum & Nummer ---
-
-/**
- * Konverterar ett Excel-datum (tal) till ett YYYY-MM-DD-format.
- * @param {number} excelDate – Datumet som ett tal (t.ex. 45000).
- * @returns {string|null} Datumet i YYYY-MM-DD-format, eller null vid fel.
- */
-function convertExcelDate(excelDate) {
-  // Excel lagrar datum som antal dagar sedan 1899-12-30 (på grund av en bugg i gamla system)
-  // 1899-12-30 är dag 0 för Excel.
-  const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // 1899-12-30 är månad 11 i JS Dates (december är 11)
-  const millisecondsPerDay = 86400 * 1000;
-
-  // Excel har problem med skottår, särskilt runt 1900.
-  // Om datumet är 60 eller högre och före 1900-03-01, subtrahera en dag.
-  // Detta är för att hantera Excel's felaktiga behandling av 1900 som skottår.
-  let dateOffset = excelDate;
-  if (excelDate >= 60) {
-    dateOffset -= 1;
-  }
-
-  const date = new Date(excelEpoch.getTime() + dateOffset * millisecondsPerDay);
-
-  // Kontrollera om konverteringen blev korrekt
-  if (isNaN(date.getTime())) {
-    console.error("Kunde inte konvertera Excel-datum:", excelDate);
-    return null;
-  }
-
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0"); // Månader är 0-indexerade
-  const day = String(date.getUTCDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-/**
- * Formaterar ett nummer för visning i PDF, med två decimaler och svensk formatering.
- * Använder endast heltal för vissa fält, annars två decimaler.
- * @param {*} amount – Värdet som ska formateras.
- * @param {boolean} useTwoDecimals – Om två decimaler ska visas.
- * @returns {string} – Formaterat belopp som sträng, eller tom sträng om ogiltigt.
- */
-function formatCurrencyForPdf(amount, useTwoDecimals = true) {
-  if (amount === null || amount === undefined || String(amount).trim() === "") {
-    return "";
-  }
-  const cleanedString = String(amount).replace(/\s/g, "").replace(",", ".");
-  const num = parseFloat(cleanedString);
-
-  if (isNaN(num)) {
-    return "";
-  }
-
-  if (useTwoDecimals) {
-    return num.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  } else {
-    // För heltal (t.ex. saldo)
-    return Math.round(num).toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  }
-}
 
 /**
  * Konverterar ett Excel-datum (tal) till ett YYYY-MM-DD-format.
@@ -5596,7 +5495,8 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
   const hm = currentHuvudmanFullData.huvudmanDetails;
   const gm = activeGodManProfile;
   console.log("[PDF Gen FS] Data för PDF (hm-objekt):", JSON.parse(JSON.stringify(hm)));
-  console.log("[PDF Gen FS] Mallfilnamn:", currentFsPdfMallFilnamn, "Kommun (för filnamn):", currentFsKommunNamn);
+  console.log("[PDF Gen FS] Alla keys i hm-objekt:", Object.keys(hm));
+  console.log("[PDF Gen FS] Kostnadsfält - Hyra:", hm.Hyra, "ElKostnad:", hm.ElKostnad, "Bredband:", hm.Bredband);
   const idag = new Date();
   const ansokanDatumPdf = hm.AnsokanDatum || idag.toISOString().slice(0, 10);
   const ansokanAvserArPdf = String(hm.AnsokanAvserAr || idag.getFullYear());
@@ -5673,8 +5573,10 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
       { pdfFaltnamn: "ovrigKostnadBelopp", hmDataNyckel: "OvrigKostnadBelopp" },
     ];
     let summaUtgifter = 0;
+    console.log("[PDF Gen FS] Försöker fylla kostnader. Kostnad-mappning:", kostnaderAttFylla.map(k => `${k.hmDataNyckel}→${k.pdfFaltnamn}`).join(", "));
     kostnaderAttFylla.forEach(kostnad => {
       const vardeFranHm = hm[kostnad.hmDataNyckel];
+      console.log(`[PDF Gen FS] Kostnad ${kostnad.hmDataNyckel}: Värde från HM = ${vardeFranHm}`);
       if (vardeFranHm !== null && vardeFranHm !== undefined && String(vardeFranHm).trim() !== "") {
         if (kostnad.ärText) {
           trySetTextField(form, kostnad.pdfFaltnamn, String(vardeFranHm));
@@ -5721,6 +5623,10 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
     );
   }
 }
+// Alias för bakåtkompatibilitet
+window.onClickGenerateFsPdf = function onClickGenerateFsPdf() {
+  return genereraOchLaddaNerForsorjningsstodPdf();
+};
 
 function setCivilstandRadioFromCheckboxes(form, baseName, civilstandFromDb) {
   const options = ["Gift", "Sambo", "Ensamstaende"];
@@ -6333,16 +6239,24 @@ function trySetTextField(form, fieldName, value) {
   try {
     const field = form.getField(fieldName);
     if (!field) {
-      // console.warn(`[PDF TextFält] Fältet '${fieldName}' hittades INTE i PDF-mallen. Skippar ifyllnad.`);
+      console.warn(`[PDF TextFält] Fältet '${fieldName}' hittades INTE i PDF-mallen. Möjliga PDF-fält:`);
+      // Visa alla tillgängliga fält för debugging
+      try {
+        const allFields = form.getFields().map(f => f.getName());
+        console.log('Tillgängliga fält i PDF:', allFields);
+      } catch (e) {
+        console.log('Kunde inte lista fält:', e.message);
+      }
       return;
     }
     if (typeof field.setText === "function") {
       field.setText(value === null || value === undefined ? "" : String(value));
+      console.log(`[PDF TextFält] ✓ Fältet '${fieldName}' fyllt med: "${String(value).substring(0, 50)}${String(value).length > 50 ? '...' : ''}"`);
     } else {
-      // console.warn(`[PDF TextFält] Fältet '${fieldName}' är inte ett textfält. Typ: ${field.constructor.name}`);
+      console.warn(`[PDF TextFält] Fältet '${fieldName}' är inte ett textfält. Typ: ${field.constructor.name}`);
     }
   } catch (e) {
-    // console.warn(`[PDF TextFält FEL] Kunde inte hantera fältet '${fieldName}' med värdet '${value}': ${e.message}`);
+    console.warn(`[PDF TextFält FEL] Kunde inte hantera fältet '${fieldName}' med värdet '${value}': ${e.message}`);
   }
 }
 
@@ -7560,23 +7474,89 @@ window.onclick = function (event) {
   });
 };
 
-function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
-  if (!currentHuvudmanFullData || !currentHuvudmanFullData.huvudmanDetails) {
-    alert("Välj en huvudman på 'Huvudman'-fliken först.");
+
+function getSelectedPnr() {
+  const el = document.getElementById("huvudmanSelect");
+  return el ? el.value : "";
+}
+
+// Idempotent mapping som fallback (om knappen skulle sakna data-template-id)
+window.FS_TEMPLATE_IDS_BY_NAME = window.FS_TEMPLATE_IDS_BY_NAME || {
+  "Upplands Väsby":   2,
+  "Järfälla Kommun":  3,
+  "Sigtuna Kommun":   4,
+  "Solna Stad":       5,
+  "Stockholm Stad":   6
+};
+
+// Mappning av kommun-namn till PDF-mallfilnamn
+window.FS_PDF_FILENAMES_BY_NAME = window.FS_PDF_FILENAMES_BY_NAME || {
+  "Upplands Väsby":   "pdf_templates/Ansokan_Upplands_Vasby.pdf",
+  "Järfälla Kommun":  "pdf_templates/Ansokan_Jarfalla.pdf",
+  "Sigtuna Kommun":   "pdf_templates/Ansokan_Sigtuna.pdf",
+  "Solna Stad":       "pdf_templates/Ansokan_Solna.pdf",
+  "Stockholm Stad":   "pdf_templates/Ansokan_Stockholm.pdf"
+};
+
+function getSelectedPnr() {
+  const el = document.getElementById("huvudmanSelect");
+  return el ? el.value : "";
+}
+
+// Normalisera namn vid fallback-matchning
+function normKommun(s) {
+  return String(s || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+window.openForsorjningsstodModal = function openForsorjningsstodModal(kommunNamn, mallFilnamn /*optional*/, ev /*optional*/) {
+  // Grundkrav
+  if (!currentHuvudmanFullData?.huvudmanDetails) { alert("Välj en huvudman på 'Huvudman'-fliken först."); return; }
+  if (!activeGodManProfile) { alert("Välj en aktiv God Man-profil på 'God Man Profiler'-fliken."); return; }
+
+  // 1) Hämta templateId på ett robust sätt (sluta använda en lös variabel "templateId")
+  const tidFromMap = (window.FS_TEMPLATE_IDS_BY_NAME || {})[kommunNamn] ?? null;
+  const tidFromBtn = ev?.currentTarget?.dataset?.templateId
+    ? parseInt(ev.currentTarget.dataset.templateId, 10)
+    : null;
+  const tid = tidFromMap || tidFromBtn || null;
+
+  // 2) Spara globalt
+  window.currentFsKommunNamn = kommunNamn || "";
+  window.currentFsTemplateId = tid;
+
+  // 3) Varning om ID saknas (istället för att krascha)
+  if (!tid) {
+    alert(`Hittade inget templateId för “${kommunNamn}”. Kontrollera kartan FS_TEMPLATE_IDS_BY_NAME eller lägg data-template-id på knappen.`);
     return;
   }
-  if (!activeGodManProfile) {
-    alert("Välj en aktiv God Man-profil på 'God Man Profiler'-fliken.");
+
+  // 4) Uppdatera rubriker/labels i modalen
+  const titleEl = document.getElementById("forsorjningsstodModalTitle");
+  if (titleEl) titleEl.textContent = `Granska Uppgifter för Försörjningsstöd till ${kommunNamn}`;
+  const span1 = document.getElementById("fsModalKommunNamn");
+  if (span1) span1.textContent = kommunNamn;
+  const span2 = document.getElementById("fsModalKommunNamnKnapp2");
+  if (span2) span2.textContent = kommunNamn;
+
+  // Spara (bakåtkompatibelt) - hämta PDF-filnamn från mappning om inte skickat som parameter
+  const pdfFilnamn = mallFilnamn || (window.FS_PDF_FILENAMES_BY_NAME || {})[kommunNamn] || "";
+  window.currentFsTemplateId   = tid;
+  window.currentFsPdfMallFilnamn = pdfFilnamn;
+  window.currentFsKommunNamn     = kommunNamn;
+
+  // Kontrollera att vi har allt vi behöver
+  if (!pdfFilnamn) {
+    alert(`Hittade inget PDF-filnamn för "${kommunNamn}". Uppdatera FS_PDF_FILENAMES_BY_NAME-mappningen.`);
     return;
   }
-  currentFsPdfMallFilnamn = mallFilnamn;
-  currentFsKommunNamn = kommunNamn;
-  const modalTitle = document.getElementById("forsorjningsstodModalTitle");
-  if (modalTitle) modalTitle.textContent = `Granska Uppgifter för Försörjningsstöd till ${kommunNamn}`;
-  const modalKommunNamnSpan = document.getElementById("fsModalKommunNamn");
-  if (modalKommunNamnSpan) modalKommunNamnSpan.textContent = kommunNamn;
-  const modalKommunNamnKnappSpan = document.getElementById("fsModalKommunNamnKnapp2");
-  if (modalKommunNamnKnappSpan) modalKommunNamnKnappSpan.textContent = kommunNamn;
+
+  console.log(`[FS Modal] Öppnar: ${kommunNamn} (tid=${tid}, fil=${pdfFilnamn}`);
+
+  // ---- Din befintliga visningslogik: OFÖRÄNDRAD nedan ----
+
   const dynamicContainers = [
     "fsVisningPersonuppgifterContainer",
     "fsVisningBarnContainer",
@@ -7594,16 +7574,20 @@ function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
     if (container) container.innerHTML = "";
     else console.warn(`HTML-container med ID '${id}' för visning hittades inte i modalen.`);
   });
+
   ["fsModalAnsokanDatum", "fsModalAnsokanAvserAr", "fsModalAnsokanAvserManad"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
     else console.warn(`HTML-input med ID '${id}' hittades inte i modalen.`);
   });
+
   const ovrigInfoTextAreaModal = document.getElementById("fsAnsokanOvrigInfoHandlaggare_Modal");
   if (ovrigInfoTextAreaModal) ovrigInfoTextAreaModal.value = "";
+
   const hm = currentHuvudmanFullData.huvudmanDetails;
   const idag = new Date();
   const dagensDatumISO = idag.toISOString().slice(0, 10);
+
   const addTextToContainer = (containerId, label, value) => {
     if (value !== null && value !== undefined && String(value).trim() !== "") {
       const container = document.getElementById(containerId);
@@ -7617,18 +7601,22 @@ function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
       }
     }
   };
+
   const addCheckboxDisplay = (containerId, label, checked) => {
     const container = document.getElementById(containerId);
     if (container && (checked === 1 || checked === 0 || typeof checked === "boolean")) {
       addTextToContainer(containerId, label, checked ? "Ja" : "Nej");
     }
   };
+
   const fsModalAnsokanDatumEl = document.getElementById("fsModalAnsokanDatum");
   if (fsModalAnsokanDatumEl) fsModalAnsokanDatumEl.value = dagensDatumISO;
+
   let beraknatAnsokanAr =
     hm.FS_AnsokanAvserAr_Sparad || hm.Ansokan_AvserAr
       ? parseInt(hm.FS_AnsokanAvserAr_Sparad || hm.Ansokan_AvserAr)
       : idag.getFullYear();
+
   let beraknatAnsokanManadNamn = hm.FS_AnsokanAvserManad_Sparad || hm.Ansokan_AvserManad || "";
   if (!beraknatAnsokanManadNamn) {
     let beraknatAnsokanManadNummer = idag.getMonth() + 1;
@@ -7642,50 +7630,44 @@ function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
       month: "long",
     });
   }
+
   const fsModalAnsokanAvserArEl = document.getElementById("fsModalAnsokanAvserAr");
   if (fsModalAnsokanAvserArEl) fsModalAnsokanAvserArEl.value = beraknatAnsokanAr.toString();
   const fsModalAnsokanAvserManadEl = document.getElementById("fsModalAnsokanAvserManad");
   if (fsModalAnsokanAvserManadEl) fsModalAnsokanAvserManadEl.value = beraknatAnsokanManadNamn;
+
   const fsVisningKommunensHandlaggareEl = document.getElementById("fsVisningKommunensHandlaggare");
   if (fsVisningKommunensHandlaggareEl) {
     fsVisningKommunensHandlaggareEl.textContent = hm.Ansokan_Handlaggare || hm.FS_KommunHandlaggare || "Ej angivet";
   } else {
     console.warn("Element 'fsVisningKommunensHandlaggare' hittades inte.");
   }
+
   const personContainer = "fsVisningPersonuppgifterContainer";
-  addTextToContainer(
-    personContainer,
-    "Namn & Pnr",
-    `${hm.Fornamn || ""} ${hm.Efternamn || ""} (${hm.Personnummer || "-"})`
-  ); // Korrigerat label
-  addTextToContainer(personContainer, "Medborgarskap", hm.Medborgarskap || "Svensk"); // Använder generellt medborgarskap
+  addTextToContainer(personContainer, "Namn & Pnr", `${hm.Fornamn || ""} ${hm.Efternamn || ""} (${hm.Personnummer || "-"})`);
+  addTextToContainer(personContainer, "Medborgarskap", hm.Medborgarskap || "Svensk");
   const sokandeCivilstand = hm.Civilstand || "";
   addTextToContainer(personContainer, "Civilstånd", sokandeCivilstand);
-  const sammanboendeVal = hm.Sammanboende === 1 ? "Ja" : "Nej"; // Använder generellt sammanboende
+
+  const sammanboendeVal = hm.Sammanboende === 1 ? "Ja" : "Nej";
   addTextToContainer(personContainer, "Sammanboende", sammanboendeVal);
+
   if (sammanboendeVal === "Ja" && hm.MedsokandePersonnummer) {
-    // Använder generella medsökande-fält
     const hrEl = document.createElement("hr");
     const medSokCont = document.getElementById(personContainer);
     if (medSokCont) medSokCont.appendChild(hrEl);
-    addTextToContainer(
-      personContainer,
-      "Medsökande Namn",
-      `${hm.MedsokandeFornamn || ""} ${hm.MedsokandeEfternamn || ""} (${hm.MedsokandePersonnummer || "-"})`
-    );
+    addTextToContainer(personContainer, "Medsökande Namn", `${hm.MedsokandeFornamn || ""} ${hm.MedsokandeEfternamn || ""} (${hm.MedsokandePersonnummer || "-"})`);
     addTextToContainer(personContainer, "Medsökande Medborgarskap", hm.MedsokandeMedborgarskap);
     addTextToContainer(personContainer, "Medsökande Civilstånd", hm.MedsokandeCivilstand);
   }
-  addTextToContainer(
-    personContainer,
-    "Utbetalning önskas till",
-    hm.FS_UtbetalningOnskasTill || "Senast registrerat konto"
-  );
+
+  addTextToContainer(personContainer, "Utbetalning önskas till", hm.FS_UtbetalningOnskasTill || "Senast registrerat konto");
+
   const barnVisningsContainerEl = document.getElementById("fsVisningBarnContainer");
   if (barnVisningsContainerEl) {
-    barnVisningsContainerEl.innerHTML =
-      "<p><em>Information om hemmavarande barn hämtas från Huvudman-fliken (om relevant).</em></p>";
+    barnVisningsContainerEl.innerHTML = "<p><em>Information om hemmavarande barn hämtas från Huvudman-fliken (om relevant).</em></p>";
   }
+
   const bostadContainerId = "fsVisningBostadContainer";
   const bostadContainerEl = document.getElementById(bostadContainerId);
   if (bostadContainerEl) bostadContainerEl.innerHTML = "";
@@ -7695,25 +7677,26 @@ function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
   addTextToContainer(bostadContainerId, "Telefon/E-post", hm.Telefon || hm.Mobil || hm.Epost || "");
   addTextToContainer(bostadContainerId, "Antal rum", hm.BostadAntalRum);
   addTextToContainer(bostadContainerId, "Antal boende", hm.BostadAntalBoende);
-  addTextToContainer(bostadContainerId, "Hyresvärd", hm.BoendeNamn); // Använder BoendeNamn som hyresvärd
+  addTextToContainer(bostadContainerId, "Hyresvärd", hm.BoendeNamn);
   addTextToContainer(bostadContainerId, "Typ av boende", hm.BostadTyp);
   addTextToContainer(bostadContainerId, "Kontraktstid", hm.BostadKontraktstid || "tillsvidare");
+
   const sysselContainer = "fsVisningSysselsattningContainer";
   addTextToContainer(sysselContainer, "Sökande", hm.Sysselsattning || "");
   if (sammanboendeVal === "Ja" && hm.MedsokandePersonnummer) {
     addTextToContainer(sysselContainer, "Medsökande", hm.MedsokandeSysselsattning || "");
   }
-  const ovrigInfoText = hm.ArsrOvrigaUpplysningar || ""; // Använder generellt fält
-  const ovrigInfoVisningsContainer = document.getElementById("fsVisningOvrigInfoContainer"); // Korrigerat ID
+
+  const ovrigInfoText = hm.ArsrOvrigaUpplysningar || "";
+  const ovrigInfoVisningsContainer = document.getElementById("fsVisningOvrigInfoContainer");
   if (ovrigInfoVisningsContainer) {
-    if (ovrigInfoText.trim() !== "") {
-      ovrigInfoVisningsContainer.textContent = ovrigInfoText;
-    } else {
-      ovrigInfoVisningsContainer.textContent = "Ingen övrig information angiven på Huvudman-fliken.";
-    }
+    if (ovrigInfoText.trim() !== "") ovrigInfoVisningsContainer.textContent = ovrigInfoText;
+    else ovrigInfoVisningsContainer.textContent = "Ingen övrig information angiven på Huvudman-fliken.";
   }
+
   const fsVisningInkomsterSaknasHeltEl = document.getElementById("fsVisningInkomsterSaknasHelt_Modal");
   if (fsVisningInkomsterSaknasHeltEl) fsVisningInkomsterSaknasHeltEl.checked = !!hm.FS_Inkomster_SaknasHelt;
+
   const inkomstMapping = {
     "Lön (typiskt)": hm.Lon,
     "Pension/Sjukers./Aktivitetsers. (typiskt)": hm.PensionLivrantaSjukAktivitet,
@@ -7728,18 +7711,15 @@ function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
     "Barns Inkomst (typiskt)": hm.BarnsInkomst,
     "Skatteåterbäring (typiskt)": hm.Skatteaterbaring,
     "Studiemedel (bidragsdel) (typiskt)": hm.Studiemedel,
-    "Väntad inkomst (typiskt)": `${hm.VantadInkomstBeskrivning || ""} ${
-      formatCurrencyForPdfNoDecimals(hm.VantadInkomstBelopp, false) || ""
-    }`.trim(),
-    "Övrig inkomst (typiskt)": `${hm.OvrigInkomstBeskrivning || ""} ${
-      formatCurrencyForPdfNoDecimals(hm.OvrigInkomstBelopp, false) || ""
-    }`.trim(),
+    "Väntad inkomst (typiskt)": `${hm.VantadInkomstBeskrivning || ""} ${formatCurrencyForPdfNoDecimals(hm.VantadInkomstBelopp, false) || ""}`.trim(),
+    "Övrig inkomst (typiskt)": `${hm.OvrigInkomstBeskrivning || ""} ${formatCurrencyForPdfNoDecimals(hm.OvrigInkomstBelopp, false) || ""}`.trim(),
   };
+
   let harInkomsterAttVisa = false;
   for (const label in inkomstMapping) {
     const value = inkomstMapping[label];
     if (value !== null && value !== undefined && String(value).trim() !== "") {
-      addTextToContainer("fsVisningInkomsterContainer", label, formatCurrencyForPdfNoDecimals(value, false) || value); // Visa även text
+      addTextToContainer("fsVisningInkomsterContainer", label, formatCurrencyForPdfNoDecimals(value, false) || value);
       harInkomsterAttVisa = true;
     }
   }
@@ -7747,102 +7727,77 @@ function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
     const inkomstCont = document.getElementById("fsVisningInkomsterContainer");
     if (inkomstCont) inkomstCont.innerHTML = "<p><em>Inga typiska inkomster angivna.</em></p>";
   }
+
   const fsVisningTillgangarSaknasHeltEl = document.getElementById("fsVisningTillgangarSaknasHelt_Modal");
   if (fsVisningTillgangarSaknasHeltEl) fsVisningTillgangarSaknasHeltEl.checked = !!hm.FS_Tillgangar_SaknasHelt;
   const tillgCont = document.getElementById("fsVisningTillgangarContainer");
   if (tillgCont) {
-    tillgCont.innerHTML = ""; // Rensa först
-    addTextToContainer(
-      "fsVisningTillgangarContainer",
-      "Bankmedel (totalt)",
-      formatCurrencyForPdfNoDecimals(hm.TillgangBankmedelVarde, false)
-    );
-    addTextToContainer(
-      "fsVisningTillgangarContainer",
-      "Bostadsrätt/Fastighet",
-      formatCurrencyForPdfNoDecimals(hm.TillgangBostadsrattFastighetVarde, false)
-    );
-    addTextToContainer(
-      "fsVisningTillgangarContainer",
-      "Fordon m.m.",
-      formatCurrencyForPdfNoDecimals(hm.TillgangFordonMmVarde, false)
-    );
-    if (
-      !hm.TillgangBankmedelVarde &&
-      !hm.TillgangBostadsrattFastighetVarde &&
-      !hm.TillgangFordonMmVarde &&
-      !hm.FS_Tillgangar_SaknasHelt
-    ) {
+    tillgCont.innerHTML = "";
+    addTextToContainer("fsVisningTillgangarContainer", "Bankmedel (totalt)", formatCurrencyForPdfNoDecimals(hm.TillgangBankmedelVarde, false));
+    addTextToContainer("fsVisningTillgangarContainer", "Bostadsrätt/Fastighet", formatCurrencyForPdfNoDecimals(hm.TillgangBostadsrattFastighetVarde, false));
+    addTextToContainer("fsVisningTillgangarContainer", "Fordon m.m.", formatCurrencyForPdfNoDecimals(hm.TillgangFordonMmVarde, false));
+    if (!hm.TillgangBankmedelVarde && !hm.TillgangBostadsrattFastighetVarde && !hm.TillgangFordonMmVarde && !hm.FS_Tillgangar_SaknasHelt) {
       tillgCont.innerHTML = "<p><em>Inga typiska tillgångar angivna.</em></p>";
     }
   }
+
   const riksnormManadSpan = document.getElementById("fsVisningRiksnormManad_Modal");
   if (riksnormManadSpan) riksnormManadSpan.textContent = beraknatAnsokanManadNamn;
+
   const checkboxRiksnormModalEl = document.getElementById("fsVisningCheckboxRiksnorm_Modal");
   if (checkboxRiksnormModalEl)
-    checkboxRiksnormModalEl.checked =
-      hm.FS_Ansokan_Checkbox_Riksnorm !== undefined ? !!hm.FS_Ansokan_Checkbox_Riksnorm : true;
+    checkboxRiksnormModalEl.checked = hm.FS_Ansokan_Checkbox_Riksnorm !== undefined ? !!hm.FS_Ansokan_Checkbox_Riksnorm : true;
+
   const kostnaderVisningsContainer = document.getElementById("fsVisningKostnaderContainer_Modal");
   if (kostnaderVisningsContainer) kostnaderVisningsContainer.innerHTML = "";
   const kostnaderAttVisa = {
     "Hyra/Boendekostnad": hm.Hyra,
-    Elkostnad: hm.ElKostnad,
-    Hemförsäkring: hm.Hemforsakring,
+    "Elkostnad": hm.ElKostnad,
+    "Hemförsäkring": hm.Hemforsakring,
     "Reskostnader (SL, Färdtjänst etc.)": hm.Reskostnader,
     "Fackavgift/A-kassa": hm.FackAvgiftAkassa,
-    Medicinkostnad: hm.MedicinKostnad,
-    Läkarvårdskostnad: hm.Lakarvardskostnad,
+    "Medicinkostnad": hm.MedicinKostnad,
+    "Läkarvårdskostnad": hm.Lakarvardskostnad,
     "Akut Tandvårdskostnad": hm.AkutTandvardskostnad,
-    Barnomsorgsavgift: hm.BarnomsorgAvgift,
-    Färdtjänstavgift: hm.FardtjanstAvgift,
-    Bredbandskostnad: hm.Bredband,
-    "Övrig kostnad": `${hm.OvrigKostnadBeskrivning || ""} ${
-      formatCurrencyForPdfNoDecimals(hm.OvrigKostnadBelopp, false) || ""
-    }`.trim(),
+    "Barnomsorgsavgift": hm.BarnomsorgAvgift,
+    "Färdtjänstavgift": hm.FardtjanstAvgift,
+    "Bredbandskostnad": hm.Bredband,
+    "Övrig kostnad": `${hm.OvrigKostnadBeskrivning || ""} ${formatCurrencyForPdfNoDecimals(hm.OvrigKostnadBelopp, false) || ""}`.trim(),
   };
   let harTypiskaKostnaderAttVisa = false;
   for (const label in kostnaderAttVisa) {
     const value = kostnaderAttVisa[label];
     if (value !== null && value !== undefined && String(value).trim() !== "") {
-      addTextToContainer(
-        "fsVisningKostnaderContainer_Modal",
-        label,
-        formatCurrencyForPdfNoDecimals(value, false) || value
-      );
+      addTextToContainer("fsVisningKostnaderContainer_Modal", label, formatCurrencyForPdfNoDecimals(value, false) || value);
       harTypiskaKostnaderAttVisa = true;
     }
   }
   if (!harTypiskaKostnaderAttVisa && kostnaderVisningsContainer) {
     kostnaderVisningsContainer.innerHTML = "<p><em>Inga typiska kostnader angivna.</em></p>";
   }
+
   const formanCont = document.getElementById("fsVisningFormanContainer");
   if (formanCont) {
     formanCont.innerHTML = "";
     addTextToContainer(
       "fsVisningFormanContainer",
       "Sökande väntar på beslut",
-      `${hm.ErsattningAnnanMyndighetStatus === 1 ? "Ja" : "Nej"}${
-        hm.ErsattningAnnanMyndighetStatus === 1 && hm.ErsattningAnnanMyndighetFran
-          ? ": " + hm.ErsattningAnnanMyndighetFran
-          : ""
-      }`
+      `${hm.ErsattningAnnanMyndighetStatus === 1 ? "Ja" : "Nej"}${hm.ErsattningAnnanMyndighetStatus === 1 && hm.ErsattningAnnanMyndighetFran ? ": " + hm.ErsattningAnnanMyndighetFran : ""}`
     );
-    // Medsökande hanteras inte här då det inte finns generella fält för det
   }
+
   const medgivCont = document.getElementById("fsVisningMedgivandeContainer");
   if (medgivCont) {
     medgivCont.innerHTML = "";
-    addCheckboxDisplay(
-      "fsVisningMedgivandeContainer",
-      "Jag/vi lämnar medgivande (stora krysset)",
-      hm.FS_Medgivande_Huvudkryss
-    );
+    addCheckboxDisplay("fsVisningMedgivandeContainer", "Jag/vi lämnar medgivande (stora krysset)", hm.FS_Medgivande_Huvudkryss);
   }
+
   const underskriftSokandeEl = document.getElementById("fsVisningUnderskriftDatumSokande_Modal");
   if (underskriftSokandeEl) underskriftSokandeEl.textContent = formatDateForPdf(dagensDatumISO);
+
   const medsokandeUnderskriftSektion = document.getElementById("fsVisningUnderskriftMedsokandeSektion_Modal");
   if (medsokandeUnderskriftSektion) {
-    if (sammanboendeVal === "Ja" && hm.MedsokandePersonnummer) {
+    if (hm.Sammanboende === 1 && hm.MedsokandePersonnummer) {
       medsokandeUnderskriftSektion.style.display = "block";
       const underskriftMedEl = document.getElementById("fsVisningUnderskriftDatumMedsokande_Modal");
       if (underskriftMedEl) underskriftMedEl.textContent = formatDateForPdf(dagensDatumISO);
@@ -7850,12 +7805,38 @@ function openForsorjningsstodModal(kommunNamn, mallFilnamn) {
       medsokandeUnderskriftSektion.style.display = "none";
     }
   }
+
   const forsorjningsstodModalElement = document.getElementById("forsorjningsstodModal");
   if (forsorjningsstodModalElement) {
     forsorjningsstodModalElement.style.display = "block";
   } else {
     console.error("Kunde inte hitta forsorjningsstodModal för att visa den!");
   }
+}
+
+// Använd denna för din "Generera PDF"-knapp i modalen
+function generateForsorjningsstodPdf() {
+  const pnr = getSelectedPnr();
+  if (!pnr) { alert("Välj huvudman först."); return; }
+  if (!window.currentFsTemplateId) { alert("Saknar templateId – öppna modalen via en kommunknapp först."); return; }
+
+  const url = `api/generate_pdf.php?pnr=${encodeURIComponent(pnr)}&templateId=${window.currentFsTemplateId}`;
+  window.open(url, "_blank", "noopener");
+}
+
+// Kalla denna från din "Skapa/Generera PDF"-knapp i modalen
+function generateForsorjningsstodPdf() {
+  const pnr = getSelectedPnr();
+  if (!pnr) {
+    alert('Välj huvudman först.');
+    return;
+  }
+  if (!window.currentFsTemplateId) {
+    alert('Saknar templateId – öppna modalen via en kommunknapp först.');
+    return;
+  }
+  const url = `api/generate_pdf.php?pnr=${encodeURIComponent(pnr)}&templateId=${window.currentFsTemplateId}`;
+  window.open(url, "_blank", "noopener");
 }
 
 function addFsBarnRow() {
@@ -7887,258 +7868,7 @@ function addFsBarnRow() {
   container.appendChild(div);
 }
 
-async function genereraOchLaddaNerForsorjningsstodPdf() {
-  console.log("[PDF Gen FS] Startar generering av Försörjningsstöd PDF...");
-  if (!currentHuvudmanFullData || !currentHuvudmanFullData.huvudmanDetails) {
-    alert("Välj en huvudman först. PDF-generering avbruten.");
-    console.error("[PDF Gen FS] currentHuvudmanFullData eller dess details saknas.");
-    return;
-  }
-  if (!activeGodManProfile) {
-    alert("Välj en aktiv God Man-profil. PDF-generering avbruten.");
-    console.error("[PDF Gen FS] activeGodManProfile saknas.");
-    return;
-  }
-  if (!currentFsPdfMallFilnamn || !currentFsKommunNamn) {
-    alert("Internt fel: Mallfilnamn eller kommunnamn för PDF saknas. PDF-generering avbruten.");
-    console.error("[PDF Gen FS] currentFsPdfMallFilnamn eller currentFsKommunNamn saknas.");
-    return;
-  }
-  const hm = currentHuvudmanFullData.huvudmanDetails;
-  const gm = activeGodManProfile;
-  console.log("[PDF Gen FS] Data för PDF (hm-objekt):", JSON.parse(JSON.stringify(hm)));
-  console.log("[PDF Gen FS] Mallfilnamn:", currentFsPdfMallFilnamn, "Kommun:", currentFsKommunNamn);
-  const ansokanDatumPdf =
-    document.getElementById("fsModalAnsokanDatum")?.value || new Date().toISOString().slice(0, 10);
-  const ansokanAvserArPdf =
-    document.getElementById("fsModalAnsokanAvserAr")?.value || new Date().getFullYear().toString();
-  const ansokanAvserManadPdf =
-    document.getElementById("fsModalAnsokanAvserManad")?.value || new Date().toLocaleString("sv-SE", { month: "long" });
-  console.log(
-    `[PDF Gen FS] Ansökningsdatum: ${ansokanDatumPdf}, Avser År: ${ansokanAvserArPdf}, Avser Månad: ${ansokanAvserManadPdf}`
-  );
-  const ovrigInfoPdf = hm.ArsrOvrigaUpplysningar || ""; // Använder generellt fält
-  console.log("[PDF Gen FS] Övrig Info (hämtad):", ovrigInfoPdf);
-  if (!window.PDFLib || !window.fontkit) {
-    alert("PDF-bibliotek (PDFLib eller Fontkit) är inte korrekt laddat.");
-    console.error("[PDF Gen FS] PDFLib eller Fontkit saknas på window-objektet.");
-    return;
-  }
-  const { PDFDocument, rgb } = window.PDFLib;
-  const fontkit = window.fontkit;
-  try {
-    const templateUrl = `/${currentFsPdfMallFilnamn}`;
-    const fontUrl = "/fonts/LiberationSans-Regular.ttf";
-    console.log(`[PDF Gen FS] Laddar mall från: ${templateUrl} och font från: ${fontUrl}`);
-    const [existingPdfBytes, fontBytes] = await Promise.all([
-      fetch(templateUrl).then(res => {
-        if (!res.ok)
-          throw new Error(`Kunde inte ladda mall ${currentFsPdfMallFilnamn}: ${res.statusText} (${res.status})`);
-        return res.arrayBuffer();
-      }),
-      fetch(fontUrl).then(res => {
-        if (!res.ok) throw new Error(`Kunde inte ladda font: ${res.statusText} (${res.status})`);
-        return res.arrayBuffer();
-      }),
-    ]);
-    console.log("[PDF Gen FS] Mall och font har laddats.");
-    if (!existingPdfBytes || existingPdfBytes.byteLength === 0) throw new Error(`Mallen '${templateUrl}' är tom.`);
-    if (!fontBytes || fontBytes.byteLength === 0) throw new Error(`Fonten '${fontUrl}' är tom.`);
-    const pdfDoc = await PDFDocument.load(existingPdfBytes);
-    console.log("[PDF Gen FS] pdfDoc-instans skapad.");
-    pdfDoc.registerFontkit(fontkit);
-    const customFont = await pdfDoc.embedFont(fontBytes);
-    const form = pdfDoc.getForm();
-    console.log("[PDF Gen FS] Formulär-objekt hämtat.");
-    const fields = form.getFields();
-    console.log(`[PDF Gen FS] Fält i PDF-mallen '${currentFsPdfMallFilnamn}':`);
-    fields.forEach(field => console.log(`- Namn: ${field.getName()}, Typ: ${field.constructor.name}`));
 
-    trySetTextField(form, "heltNamn", `${hm.Fornamn || ""} ${hm.Efternamn || ""}`);
-    trySetTextField(form, "personnummer", hm.Personnummer || "");
-    trySetTextField(form, "medborgarskap", hm.Medborgarskap || "");
-    trySetTextField(form, "datum", ansokanDatumPdf || "");
-    trySetTextField(form, "ar", ansokanAvserArPdf || "");
-    trySetTextField(form, "manad", ansokanAvserManadPdf || "");
-    trySetTextField(form, "kommunHandlaggare", hm.kommunHandlaggare || "");
-    trySetCheckbox(form, "Sokande_Civilstand_GiftRegPartner", !!hm.FS_Sokande_Civilstand_GiftRegPartner);
-    trySetCheckbox(form, "Sokande_Civilstand_Ogift", !!hm.FS_Sokande_Civilstand_Ogift);
-    trySetCheckbox(form, "Sokande_Civilstand_Skild", !!hm.FS_Sokande_Civilstand_Skild);
-    trySetCheckbox(form, "Sokande_Civilstand_AnkaAnkling", !!hm.FS_Sokande_Civilstand_AnkaAnkling);
-    const isSammanboende = hm.Sammanboende === 1; // Använder generellt sammanboende
-    trySetCheckbox(form, "Sokande_Sammanboende_Ja", isSammanboende);
-    trySetCheckbox(form, "Sokande_Sammanboende_Nej", !isSammanboende);
-    if (isSammanboende) {
-      trySetTextField(form, "Medsokande_Namn", `${hm.MedsokandeFornamn || ""} ${hm.MedsokandeEfternamn || ""}`);
-      trySetTextField(form, "Medsokande_Personnummer", hm.MedsokandePersonnummer || "");
-      trySetTextField(form, "Medsokande_Medborgarskap", hm.MedsokandeMedborgarskap || "");
-      trySetTextField(form, "Medsokande_Civilstand_Text", hm.MedsokandeCivilstand || "");
-    }
-    let bostadsadressFullForPdf = hm.Adress || "";
-    if (!bostadsadressFullForPdf) {
-      bostadsadressFullForPdf = `${hm.Vistelseadress || hm.Adress || ""}`;
-      const postnr = hm.Vistelsepostnr || hm.Postnummer || "";
-      const ort = hm.Vistelseort || hm.Ort || "";
-      if (postnr && ort) bostadsadressFullForPdf += `, ${postnr} ${ort}`;
-      else if (postnr) bostadsadressFullForPdf += `, ${postnr}`;
-      else if (ort) bostadsadressFullForPdf += `, ${ort}`;
-    }
-    trySetTextField(form, "Bostad_Adress", bostadsadressFullForPdf.replace(/^, |, $/, "").trim());
-    trySetTextField(form, "Bostad_TelefonSokande", hm.Telefon || hm.Mobil || hm.Epost || "");
-    trySetTextField(form, "Bostad_Hyresvard", hm.BoendeNamn || "");
-    trySetTextField(form, "bostadAntalRum", String(hm.BostadAntalRum || ""));
-    trySetTextField(form, "Bostad_AntalBoende", String(hm.BostadAntalBoende || ""));
-    let bostadTypBeskrivningForPdf = "";
-    if (hm.BostadTyp === "Annan" && hm.BoendeNamn) {
-      // Om "Annan" och BoendeNamn finns, använd BoendeNamn
-      bostadTypBeskrivningForPdf = hm.BoendeNamn;
-    } else if (hm.BostadTyp) {
-      bostadTypBeskrivningForPdf = hm.BostadTyp;
-    }
-    if (hm.BostadKontraktstid) {
-      bostadTypBeskrivningForPdf += bostadTypBeskrivningForPdf
-        ? `, kontraktstid: ${hm.BostadKontraktstid}`
-        : hm.BostadKontraktstid;
-    }
-    trySetTextField(form, "Bostad_Typ_AnnanText", bostadTypBeskrivningForPdf);
-    trySetTextField(form, "Sysselsattning_Sokande", hm.Sysselsattning || "");
-    if (isSammanboende) {
-      trySetTextField(form, "Sysselsattning_Medsokande", hm.MedsokandeSysselsattning || "");
-    }
-    const kostnaderAttFylla = [
-      { pdfFalt: "hyra", hmNyckel: "Hyra" },
-      { pdfFalt: "fackAvgiftAkassa", hmNyckel: "FackAvgiftAkassa" },
-      { pdfFalt: "resekostnader", hmNyckel: "Reskostnader" },
-      { pdfFalt: "elKostnad", hmNyckel: "ElKostnad" },
-      { pdfFalt: "hemforsakring", hmNyckel: "Hemforsakring" },
-      { pdfFalt: "medicinkostnad", hmNyckel: "MedicinKostnad" }, // Korrigerat
-      { pdfFalt: "lakarvardskostnad", hmNyckel: "Lakarvardskostnad" },
-      { pdfFalt: "barnomsorgAvgift", hmNyckel: "BarnomsorgAvgift" },
-      { pdfFalt: "fardtjanstAvgift", hmNyckel: "FardtjanstAvgift" },
-      { pdfFalt: "akutTandvardskostnad", hmNyckel: "AkutTandvardskostnad" },
-      { pdfFalt: "bredband", hmNyckel: "Bredband" },
-      { pdfFalt: "ovrigKostnadBeskrivning", hmNyckel: "OvrigKostnadBeskrivning", ärText: true },
-      { pdfFalt: "ovrigKostnadBelopp", hmNyckel: "OvrigKostnadBelopp" },
-    ];
-    kostnaderAttFylla.forEach(kostnad => {
-      const vardeFranHm = hm[kostnad.hmNyckel];
-      if (vardeFranHm !== null && vardeFranHm !== undefined && String(vardeFranHm).trim() !== "") {
-        if (kostnad.ärText) {
-          trySetTextField(form, kostnad.pdfFalt, String(vardeFranHm));
-        } else {
-          trySetTextField(form, kostnad.pdfFalt, formatBeloppForPdf(vardeFranHm));
-        }
-      } else {
-        trySetTextField(form, kostnad.pdfFalt, "");
-      }
-    });
-    trySetCheckbox(form, "Ansokan_Checkbox_Riksnorm", !!hm.FS_Ansokan_Checkbox_Riksnorm);
-    trySetTextField(
-      form,
-      "Ansokan_Riksnorm_Manad_Text",
-      `Försörjningsstöd enligt riksnorm för ${ansokanAvserManadPdf} månad`
-    );
-    trySetCheckbox(form, "Inkomster_Saknas_Helt_Checkbox", !!hm.FS_Inkomster_SaknasHelt);
-    trySetCheckbox(form, "Tillgangar_Saknas_Helt_Checkbox", !!hm.FS_Tillgangar_SaknasHelt);
-    trySetTextField(
-      form,
-      "Tillgangar_Bankmedel_Text",
-      hm.TillgangBankmedelVarde
-        ? formatCurrencyForPdfNoDecimals(hm.TillgangBankmedelVarde)
-        : hm.FS_Tillgangar_SaknasHelt
-        ? "Saknas"
-        : ""
-    );
-    trySetTextField(
-      form,
-      "Tillgangar_BostadsrattFastighet_Text",
-      hm.TillgangBostadsrattFastighetVarde
-        ? formatCurrencyForPdfNoDecimals(hm.TillgangBostadsrattFastighetVarde)
-        : hm.FS_Tillgangar_SaknasHelt
-        ? "Saknas"
-        : ""
-    );
-    trySetTextField(
-      form,
-      "Tillgangar_BilMCOsv_Text",
-      hm.TillgangFordonMmVarde
-        ? formatCurrencyForPdfNoDecimals(hm.TillgangFordonMmVarde)
-        : hm.FS_Tillgangar_SaknasHelt
-        ? "Saknas"
-        : ""
-    );
-    trySetTextField(
-      form,
-      "Tillgangar_Utlandet_Text",
-      hm.FS_Tillgang_Utlandet_Text || (hm.FS_Tillgangar_SaknasHelt ? "Saknas" : "")
-    );
-    trySetTextField(
-      form,
-      "Tillgangar_Foretag_Text",
-      hm.FS_Tillgang_Foretag_Text || (hm.FS_Tillgangar_SaknasHelt ? "Saknas" : "")
-    );
-    trySetTextField(
-      form,
-      "Tillgangar_Ovrigt_Text",
-      hm.FS_Tillgang_Ovrigt_Text || (hm.FS_Tillgangar_SaknasHelt ? "Saknas" : "")
-    );
-    trySetCheckbox(form, "Forman_Sokande_Ja", hm.ErsattningAnnanMyndighetStatus === 1);
-    trySetCheckbox(form, "Forman_Sokande_Nej", hm.ErsattningAnnanMyndighetStatus !== 1);
-    trySetTextField(form, "Forman_Sokande_Fran_Text", hm.ErsattningAnnanMyndighetFran || "");
-    if (isSammanboende) {
-      // Antag att medsökande inte har separata fält för detta i hm-objektet just nu
-      trySetCheckbox(form, "Forman_Medsokande_Nej", true);
-    }
-    trySetCheckbox(form, "Medgivande_Huvudkryss", !!hm.FS_Medgivande_Huvudkryss);
-    if (!hm.FS_Medgivande_Huvudkryss) {
-      trySetCheckbox(form, "Medgivande_Foretagsregistret", !!hm.FS_Medgivande_Foretagsregistret);
-      trySetCheckbox(form, "Medgivande_Jobbtorget", !!hm.FS_Medgivande_Jobbtorget);
-      trySetCheckbox(form, "Medgivande_Kronofogden", !!hm.FS_Medgivande_Kronofogden);
-      trySetCheckbox(form, "Medgivande_Lantmateriet", !!hm.FS_Medgivande_Lantmateriet);
-      trySetCheckbox(form, "Medgivande_Migrationsverket", !!hm.FS_Medgivande_Migrationsverket);
-      trySetCheckbox(form, "Medgivande_Transportstyrelsen", !!hm.FS_Medgivande_Transportstyrelsen);
-      trySetCheckbox(form, "Medgivande_AnnanSocialtjanst", !!hm.FS_Medgivande_AnnanSocialtjanst);
-    }
-    trySetTextField(form, "Ansokan_OvrigInfoHandlaggare", ovrigInfoPdf);
-    trySetTextField(form, "UnderskriftsDatum", ansokanDatumPdf);
-    trySetTextField(form, "UnderskriftsNamn", `${hm.Fornamn || ""} ${hm.Efternamn || ""}`);
-    if (isSammanboende) {
-      trySetTextField(form, "UnderskriftsDatum_Medsokande", ansokanDatumPdf);
-      trySetTextField(
-        form,
-        "UnderskriftsNamn_Medsokande",
-        `${hm.MedsokandeFornamn || ""} ${hm.MedsokandeEfternamn || ""}`
-      );
-    }
-    console.log("[PDF Gen FS] Alla fält har försökts fyllas i. Uppdaterar utseende och plattar till...");
-    form.getFields().forEach(field => {
-      try {
-        if (field.defaultUpdateAppearances && typeof field.defaultUpdateAppearances === "function") {
-          field.defaultUpdateAppearances(customFont);
-        }
-      } catch (e) {
-        console.warn(`[PDF Gen FS] PDF Fältutseende: Kunde inte uppdatera för ${field.getName()}: ${e.message}`);
-      }
-    });
-    form.flatten();
-    console.log("[PDF Gen FS] PDF:en är nu tillplattad.");
-    const pdfBytes = await pdfDoc.save();
-    console.log("[PDF Gen FS] PDF sparad till bytes. Skapar blob för nedladdning...");
-    const blob = new Blob([pdfBytes], { type: "application/pdf" });
-    const filename = `AnsokanFS_${currentFsKommunNamn.replace(/\s+/g, "_")}_${(hm.Personnummer || "hm").replace(
-      /\W/g,
-      "_"
-    )}_${ansokanAvserManadPdf}_${ansokanAvserArPdf}.pdf`;
-    triggerDownload(blob, filename);
-    alert(`PDF-ansökan för Försörjningsstöd (${currentFsKommunNamn}) genererad!`);
-    console.log(`[PDF Gen FS] PDF '${filename}' skickad för nedladdning.`);
-  } catch (error) {
-    console.error(`[PDF Gen FS] Allvarligt fel under PDF-generering för ${currentFsKommunNamn}:`, error);
-    alert(
-      `Kunde inte skapa PDF-ansökan för ${currentFsKommunNamn}.\nFel: ${error.message}\nSe konsolen för mer detaljer.`
-    );
-  }
-}
 
 function formatBeloppForPdf(value) {
   if (value === null || value === undefined || String(value).trim() === "") {
@@ -9933,43 +9663,55 @@ async function handlePdfTemplateUpload() {
 }
 
 /**
- * Samlar ihop alla <select> i tabellen och POST:ar {templateId, mapping:{…}}
+ * Samlar ihop alla <select> i tabellen och POST:ar { templateId, mappings:[...] }
  * till api/save_pdf_mapping.php
  */
 async function savePdfMapping() {
   const btn = document.getElementById("btnSavePdfMapping");
-  const tid = btn.dataset.templateId;
+  const tid = btn?.dataset?.templateId;
   if (!tid) {
     alert("Ingen uppladdad mall ännu.");
     return;
   }
 
-  // 1. Samla mapping
-  const mapping = {};
+  // 1. Samla alla valda kopplingar
+  const mappings = [];
   document.querySelectorAll("#pdfFieldMappingTable select").forEach(sel => {
-    if (sel.value) mapping[sel.dataset.pdfField] = sel.value;
+    if (sel.value) {
+      mappings.push({ pdfField: sel.dataset.pdfField, dbColumn: sel.value });
+    }
   });
 
-  if (!Object.keys(mapping).length) {
-    alert("Du har inte valt några kopplingar.");
+  if (mappings.length === 0) {
+    alert("Inga fält har valts – mappningen är tom.");
     return;
   }
 
+  // 2. Skicka till servern
   try {
     const res = await fetch("api/save_pdf_mapping.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ templateId: tid, mapping }),
+      body: JSON.stringify({ templateId: tid, mappings }),
     });
-    const json = await res.json();
-    if (!json.success) throw new Error(json.message || "Okänt fel");
-    alert("Kopplingen sparades!");
-    // Göm tabellen tills en ny PDF laddas upp
-    document.getElementById("pdfFieldMappingContainer").style.display = "none";
-  } catch (e) {
-    alert("Kunde inte spara: " + e.message);
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
+      console.log("[PDF-MAP] Mappning sparad:", data);
+      alert("PDF-mappning sparad!");
+      // uppdatera ev. visning eller hämta om tabellen
+      await loadPdfTemplateDetails(tid);
+    } else {
+      console.error("[PDF-MAP] Fel vid spar:", data);
+      alert("Fel vid sparande av PDF-mappning. Se konsolen för detaljer.");
+    }
+  } catch (err) {
+    console.error("[PDF-MAP] Undantag:", err);
+    alert("Kunde inte spara PDF-mappning (nätverksfel?).");
   }
 }
+
 // --- LOGIK FÖR FAKTURABETALNING (UiPath-interaktion) ---
 
 async function startRpaPaymentProcess() {
@@ -10359,7 +10101,15 @@ function renderDashboard(details, documents = [], bankkonton = []) {
           ${row("Pension/Sjukersättning etc.", "PENSION_LIVRANTA_SJUK_AKTIVIVET", "PensionLeverantor", "Bruttoinkomst")}
           ${row("Bostadsbidrag / BTP", "BOSTADSBIDRAG", "BostadsbidragLeverantor", "Netto per månad")}
           <tr class="section-header"><td colspan="4">Utgifter</td></tr>
-          ${row("Hyra", "HYRA", "HyraLeverantor", "Månadshyra")}
+          <tr>
+              <td><label for="ov-HYRA">Hyra</label></td>
+              <td><input type="text" id="ov-HyraLeverantor" class="budget-leverantor" placeholder="Leverantör..." value="${safe(getCaseInsensitive(details, 'HyraLeverantor'))}"></td>
+              <td>
+                  <input type="number" step="0.01" id="ov-HYRA" class="budget-belopp" placeholder="Månadshyra" value="${safe(getCaseInsensitive(details, 'HYRA'))}" disabled>
+                  <small style="display: block; text-align: right; color: #666; font-style: italic;">Hämtas från "Generella Kostnader".</small>
+              </td>
+              <td>SEK / mån</td>
+          </tr>
           ${row("Omsorgsavgift", "Omsorgsavgift", "OmsorgsavgiftLeverantor", "Avgift till kommun")}
           ${row("El", "EL_KOSTNAD", "ElLeverantor", "Snitt per månad")}
           ${row("Hemförsäkring", "HEMFORSAKRING", "HemforsakringLeverantor", "Månadspremie")}
@@ -10929,6 +10679,13 @@ async function diagEndpoints() {
 // Denna funktion körs en gång när hela sidan har laddats.
 document.addEventListener("DOMContentLoaded", initializeApp);
 async function initializeApp() {
+  // ⚠️ GUARD: Förhindra dubbelkörning av initializeApp (säkerhet)
+  if (appInitialized) {
+    console.warn("[App Init] Applikationen har redan initialiserats - ignorerar dubblering");
+    return;
+  }
+  appInitialized = true;
+
   console.log("[App Init] Startar applikationen...");
 
   // ---------- CENTRALISERADE ANROP TILL ALLA SETUP-FUNKTIONER ----------
@@ -11090,3 +10847,69 @@ async function exportHuvudmanToExcel() {
     }
   }
 }
+document.addEventListener("DOMContentLoaded", () => {
+  const hyra = document.getElementById("hyra");
+  const ovHyra = document.getElementById("ov-HYRA");
+  if (hyra && ovHyra) {
+    hyra.addEventListener("input", () => {
+      ovHyra.value = hyra.value || "";
+    });
+  }
+});
+// --- Spegla Hyra mellan Generella kostnader och Månadsbudget ---
+document.addEventListener("DOMContentLoaded", () => {
+  const hyra = document.getElementById("hyra");
+  const ovHyra = document.getElementById("ov-HYRA");
+
+  if (!hyra || !ovHyra) return;
+
+  // När man skriver i Generella kostnader → uppdatera Månadsbudget
+  hyra.addEventListener("input", () => {
+    ovHyra.value = hyra.value;
+  });
+
+  // När sidan laddas → visa samma värde i båda
+  ovHyra.value = hyra.value;
+});
+document.addEventListener("DOMContentLoaded", () => {
+  const hyra = document.getElementById("hyra");
+  const ovHyra = document.getElementById("ov-HYRA");
+  if (!hyra || !ovHyra) return;
+
+  // Live-spegel: skriv i Generella kostnader → uppdatera Månadsbudget direkt
+  hyra.addEventListener("input", () => {
+    ovHyra.value = hyra.value;
+  });
+
+  // När sidan laddas: synka initialt
+  ovHyra.value = hyra.value;
+});
+
+function setVal(id, val, isCheckbox = false, isRadioName = null, isNumeric = false, isFloat = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  if (isCheckbox) { el.checked = !!val; return; }
+  if (isRadioName) {
+    document.querySelectorAll(`input[name="${isRadioName}"]`)
+      .forEach(r => r.checked = String(r.value) === String(val));
+    return;
+  }
+
+  if (isNumeric) {
+    if (val === null || val === undefined || val === "") { el.value = ""; return; }
+    const str = String(val).replace(",", ".");                 // normalisera
+    const num = isFloat ? parseFloat(str) : parseInt(str, 10); // till tal
+    el.value = Number.isNaN(num) ? "" : String(num);           // skriv ALLTID med punkt
+    return;
+  }
+
+  el.value = (val ?? "").toString();
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const hyra = document.getElementById("hyra");
+  const ovHyra = document.getElementById("ov-HYRA");
+  if (!hyra || !ovHyra) return;
+  hyra.addEventListener("input", () => { ovHyra.value = hyra.value; });
+  ovHyra.value = hyra.value; // initial sync vid laddning
+});
