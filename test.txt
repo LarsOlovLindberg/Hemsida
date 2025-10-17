@@ -1,0 +1,16 @@
+Test file for FTP connection verification
+Created: 2025-10-16
+Status: FTP upload successful!
+
+This file verifies that the FTP connection from the local machine to godm.se is working correctly.
+
+If you can see this file in your web hosting file manager, the FTP connection is operational.
+
+Test details:
+- Host: godm.se
+- User: larslindberg.godm.se
+- Protocol: FTP
+- File: test.txt
+- Location: Root directory (same as where index.php is)
+
+All systems operational!

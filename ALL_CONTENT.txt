@@ -1,0 +1,557 @@
+﻿FULL EXPORT from huvudman_data.sqlite
+Skapad: 2025-10-17 02:47:53
+
+=== TABELL: AutogiroForetag  (rader: 0) ===
+0|ID|INTEGER|0||1
+1|Foretagsnamn|TEXT|1||0
+2|Bankgiro|TEXT|0||0
+3|Plusgiro|TEXT|0||0
+4|MottagarID|TEXT|0||0
+5|Noteringar|TEXT|0||0
+
+
+=== TABELL: GodManProfiler  (rader: 2) ===
+0|ID|INTEGER|0||1
+1|Fornamn|TEXT|0||0
+2|Efternamn|TEXT|0||0
+3|Personnummer|TEXT|0||0
+4|Adress|TEXT|0||0
+5|Postnummer|TEXT|0||0
+6|Postort|TEXT|0||0
+7|Telefon|TEXT|0||0
+8|Mobil|TEXT|0||0
+9|Epost|TEXT|0||0
+10|IsCurrentUser|INTEGER|0|0|0
+11|Clearingnummer|TEXT|0||0
+12|Kontonummer|TEXT|0||0
+
+ID|Fornamn|Efternamn|Personnummer|Adress|Postnummer|Postort|Telefon|Mobil|Epost|IsCurrentUser|Clearingnummer|Kontonummer
+1|Lars|Lindberg|19640815-1253|├ängsj├Âv├ñgen 101|176 76|J├ñrf├ñlla|0730506032|0730506032|lars-lindberg@live.se|1|8327-9|913 568 955-3
+2|Sara|Kemp|19901018-4266|Oxiev├Ñngsv├ñgen 312|23839|Oxie|0725362911|0725362911|sarakemp90@gmail.com|0|6779|572049951
+
+=== TABELL: HuvudmanArsrakningPoster  (rader: 0) ===
+0|ID|INTEGER|0||1
+1|HuvudmanPnr|TEXT|1||0
+2|ArsrakningAr|INTEGER|1||0
+3|PostKod|TEXT|1||0
+4|Summa|REAL|0||0
+5|BilagaRef|TEXT|0||0
+6|OFnotRef|TEXT|0||0
+
+
+=== TABELL: HuvudmanBankkonton  (rader: 0) ===
+0|ID|INTEGER|0||1
+1|HuvudmanPnr|TEXT|1||0
+2|Typ|TEXT|1||0
+3|RadNr|INTEGER|1||0
+4|Beskrivning|TEXT|0||0
+5|Kronor|REAL|0|0.0|0
+6|BilagaRef|TEXT|0||0
+7|OFnot|TEXT|0||0
+8|pairId|TEXT|0||0
+
+
+=== TABELL: HuvudmanDokument  (rader: 0) ===
+0|ID|INTEGER|0||1
+1|HuvudmanPnr|TEXT|1||0
+2|DokumentTyp|TEXT|1||0
+3|OriginalFilnamn|TEXT|1||0
+4|StoredFilnamn|TEXT|1||0
+5|StoredPath|TEXT|1||0
+6|CreatedAt|TIMESTAMP|0|CURRENT_TIMESTAMP|0
+
+
+=== TABELL: HuvudmanOvrigaTillgangar  (rader: 8) ===
+0|ID|INTEGER|0||1
+1|HuvudmanPnr|TEXT|1||0
+2|Typ|TEXT|1||0
+3|RadNr|INTEGER|1||0
+4|Beskrivning|TEXT|0||0
+5|Andelar|TEXT|0||0
+6|Kronor|REAL|0|0.0|0
+7|BilagaRef|TEXT|0||0
+8|OFnot|TEXT|0||0
+9|pairId|TEXT|0||0
+
+ID|HuvudmanPnr|Typ|RadNr|Beskrivning|Andelar|Kronor|BilagaRef|OFnot|pairId
+192|19650824-2796|StartPeriod|1|Handelsbanken 6170, 441 598 501||19.0|||
+193|19650824-2796|SlutPeriod|1|Handelsbanken 6170, 441 598 501||19.0|||
+200|19700107-0239|StartPeriod|1|Swedbank 8327-9, 694 312 852-7||6040.43|||
+201|19700107-0239|StartPeriod|2|Swedbank 8327-9, 984 329 382-1||401771.46|||
+202|19700107-0239|StartPeriod|3|Swedbank Robur Bas 50 8327-9, 884 180 014-0|7842,9132||||
+203|19700107-0239|SlutPeriod|1|Swedbank 8327-9, 694 312 852-7||5817.34|||
+204|19700107-0239|SlutPeriod|2|Swedbank 8327-9, 984 329 382-1||414811.61|||
+205|19700107-0239|SlutPeriod|3|Swedbank Robur Bas 50 8327-9, 884 180 014-0|7842,9132|294579.82|||
+
+=== TABELL: HuvudmanRedogorelse  (rader: 0) ===
+0|ID|INTEGER|0||1
+1|HuvudmanPnr|TEXT|1||0
+2|ArsrakningAr|INTEGER|1||0
+3|redogKalenderarStart|TEXT|0||0
+4|redogKalenderarSlut|TEXT|0||0
+5|redogSlaktskap|TEXT|0||0
+6|redogSlaktskapTyp|TEXT|0||0
+7|redogBoendeform|TEXT|0||0
+8|redogBoendeAnnatText|TEXT|0||0
+9|redogOmfBevakaRatt|INTEGER|0||0
+10|redogOmfForvaltaEgendom|INTEGER|0||0
+11|redogOmfSorjaForPerson|INTEGER|0||0
+12|redogBehovFortsatt|TEXT|0||0
+13|redogAnnanOmfattning|TEXT|0||0
+14|redogAnkBostadsbidrag|TEXT|0||0
+15|redogAnkBostadsbidragKommentar|TEXT|0||0
+16|redogAnkForsorjning|TEXT|0||0
+17|redogAnkForsorjningKommentar|TEXT|0||0
+18|redogAnkHandikapp|TEXT|0||0
+19|redogAnkHandikappKommentar|TEXT|0||0
+20|redogAnkHabilitering|TEXT|0||0
+21|redogAnkHabiliteringKommentar|TEXT|0||0
+22|redogAnkHemtjanst|TEXT|0||0
+23|redogAnkHemtjanstKommentar|TEXT|0||0
+24|redogOmfLSS|TEXT|0||0
+25|redogOmfLSSKommentar|TEXT|0||0
+26|redogPersAssistans|TEXT|0||0
+27|redogPersAssistansKommentar|TEXT|0||0
+28|redogKontaktperson|TEXT|0||0
+29|redogKontaktpersonKommentar|TEXT|0||0
+30|redogHemforsakring|TEXT|0||0
+31|redogHemforsakringKommentar|TEXT|0||0
+32|redogAvvecklatBostad|TEXT|0||0
+33|redogAvvecklatBostadKommentar|TEXT|0||0
+34|redogKostnadOmsorg|TEXT|0||0
+35|redogKostnadOmsorgKommentar|TEXT|0||0
+36|redogForbehallBelopp|TEXT|0||0
+37|redogForbehallBeloppKommentar|TEXT|0||0
+38|redogTecknatHyresavtal|TEXT|0||0
+39|redogTecknatHyresavtalKommentar|TEXT|0||0
+40|redogAnsoktNyttBoende|TEXT|0||0
+41|redogAnsoktNyttBoendeKommentar|TEXT|0||0
+42|redogEkonomiOvrigtSoktFondmedel_Text|TEXT|0||0
+43|redogAntalBesokTyp|TEXT|0||0
+44|redogVistelseUtanforHemmet|TEXT|0||0
+45|redogVistelseUtanforHemmetDetaljer|TEXT|0||0
+46|redogAntalTelefonsamtal|TEXT|0||0
+47|redogAntalKontakterAnhoriga|TEXT|0||0
+48|redogOvrigaInsatserText|TEXT|0||0
+49|redogBetalningInternetbank|INTEGER|0||0
+50|redogBetalningAutogiro|INTEGER|0||0
+51|redogKontooverforingHm|INTEGER|0||0
+52|redogKontanterHmKvitto|INTEGER|0||0
+53|redogKontooverforingBoende|INTEGER|0||0
+54|redogKontanterBoendeKvitto|INTEGER|0||0
+55|redogForvaltningSaltKoptFastighet|TEXT|0||0
+56|redogForvaltningSaltKoptFastighetKommentar|TEXT|0||0
+57|redogForvaltningHyrtUtFastighet|TEXT|0||0
+58|redogForvaltningHyrtUtFastighetKommentar|TEXT|0||0
+59|redogForvaltningSaltKoptAktier|TEXT|0||0
+60|redogForvaltningSaltKoptAktierKommentar|TEXT|0||0
+61|redogForvaltningAnnanVardepapper|TEXT|0||0
+62|redogForvaltningAnnanVardepapperKommentar|TEXT|0||0
+63|redogForvaltningSoktSkuldsanering|TEXT|0||0
+64|redogForvaltningSoktSkuldsaneringKommentar|TEXT|0||0
+65|redogForvaltningOvrigt1|TEXT|0||0
+66|redogForvaltningOvrigt2|TEXT|0||0
+67|redogArvodeBevakaRatt|INTEGER|0||0
+68|redogArvodeForvaltaEgendom|INTEGER|0||0
+69|redogArvodeSorjaForPerson|INTEGER|0||0
+70|redogArbetsinsats|TEXT|0||0
+71|redogOnskarKostnadsersattning|TEXT|0||0
+72|redogReseersattningKm|TEXT|0||0
+73|redogKorjournalBifogas|TEXT|0||0
+74|redogArvodeOvrigt|TEXT|0||0
+75|redogUnderskriftDatum|TEXT|0||0
+76|redogUnderskriftOrt|TEXT|0||0
+
+
+=== TABELL: HuvudmanSkulder  (rader: 1) ===
+0|ID|INTEGER|0||1
+1|HuvudmanPnr|TEXT|1||0
+2|RadNr|INTEGER|1||0
+3|Langivare|TEXT|0||0
+4|BilagaRef|TEXT|0||0
+5|StartBelopp|REAL|0|0.0|0
+6|SlutBelopp|REAL|0|0.0|0
+
+ID|HuvudmanPnr|RadNr|Langivare|BilagaRef|StartBelopp|SlutBelopp
+27|19560404-2910|1|Kronofogden|├àrsredovisning 2024|0.0|55414.0
+
+=== TABELL: Kategoriregler  (rader: 1) ===
+0|ID|INTEGER|0||1
+1|MatchningsTyp|TEXT|1||0
+2|MatchningsText|TEXT|1||0
+3|Kategori|TEXT|1||0
+4|Prioritet|INTEGER|0|0|0
+
+ID|MatchningsTyp|MatchningsText|Kategori|Prioritet
+1|Inneh├Ñller|F├ñrdtj├ñnst|Utgift - F├ñrdtj├ñnst|0
+2|Inneh├Ñller|Bankkort|Utgift - Bankavgifter|0
+3|Inneh├Ñller|Internetbet|Utgift - Bankavgifter|0
+4|Inneh├Ñller|Nyckelkund|Utgift - Bankavgifter|0
+5|Inneh├Ñller|Betalservice|Utgift - Bankavgifter|0
+6|Inneh├Ñller|Avgift|Utgift - Bankavgifter|0
+7|Inneh├Ñller|├ûvertrass|Utgift - Bankavgifter|0
+8|Inneh├Ñller|Bas|Utgift - Bankavgifter|0
+9|Inneh├Ñller|Annan-bank|Utgift - Bankavgifter|0
+10|Inneh├Ñller|Nordea Vardagspaket|Utgift - Bankavgifter|0
+11|Inneh├Ñller|Skuldr├ñnta|Utgift - Amortering skuld, skuldr├ñntor & avgifter, KFM|0
+12|Inneh├Ñller|├àterbet|Inkomst - ├àterbetalningar|0
+13|Inneh├Ñller|Psoriasis|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+14|Inneh├Ñller|Danderyd|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+15|Inneh├Ñller|Karolinska|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+16|Inneh├Ñller|Visma financial solution|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+17|Inneh├Ñller|Collector|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+18|Inneh├Ñller|svensk Dos|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+19|Inneh├Ñller|tandl├ñkare|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+20|Inneh├Ñller|TeamOlmed|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+21|Inneh├Ñller|FOLKTAND|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+22|Inneh├Ñller|SLL|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+23|Inneh├Ñller|PayEx|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+24|Inneh├Ñller|Walley|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+25|Inneh├Ñller|Svea Bank AB|Utgift - Amortering skuld, skuldr├ñntor & avgifter, KFM|0
+26|Inneh├Ñller|LT FOT|Utgift - Sjukhusv├Ñrd, l├ñkarbes├Âk, apotek|0
+27|Inneh├Ñller|Eget konto|Utgift - ├ûverf├Âringar eget konto|0
+29|Inneh├Ñller|st├Âd|Inkomst - Brutto ink. l├Âner, pensioner m.m.|0
+30|Inneh├Ñller|dagers├ñttning|Inkomst - Brutto ink. l├Âner, pensioner m.m.|0
+31|Inneh├Ñller|FKASSA|Inkomst - Brutto ink. l├Âner, pensioner m.m.|0
+32|Inneh├Ñller|FK/PMYND|Inkomst - Brutto ink. l├Âner, pensioner m.m.|0
+33|Inneh├Ñller|Pension|Inkomst - Brutto ink. l├Âner, pensioner m.m.|0
+34|Inneh├Ñller|Alecta|Inkomst - Brutto ink. l├Âner, pensioner m.m.|0
+35|Inneh├Ñller|KPA|Inkomst - Brutto ink. l├Âner, pensioner m.m.|0
+36|Inneh├Ñller|Runby g├Ñrdar|Utgift - Hyra/Boende/Mat|0
+37|Inneh├Ñller|Rikshem|Utgift - Hyra/Boende/Mat|0
+38|Inneh├Ñller|brf|Utgift - Hyra/Boende/Mat|0
+39|Inneh├Ñller|Solna|Utgift - Hyra/Boende/Mat|0
+40|Inneh├Ñller|Vardaga|Utgift - Hyra/Boende/Mat|0
+41|Inneh├Ñller|Nytida|Utgift - Hyra/Boende/Mat|0
+42|Inneh├Ñller|J├ñrf├ñlla K|Utgift - Hyra/Boende/Mat|0
+43|Inneh├Ñller|Upplands-bro|Utgift - Hyra/Boende/Mat|0
+44|Inneh├Ñller|Fr├Âsunda|Utgift - Hyra/Boende/Mat|0
+45|Inneh├Ñller|Autogiro|Utgift - Hyra/Boende/Mat|0
+46|Inneh├Ñller|Hyra|Utgift - Hyra/Boende/Mat|0
+47|Inneh├Ñller|barn|Inkomst - ├ûvrig inkomst|0
+48|Inneh├Ñller|Elst├Âd|Inkomst - ├ûvrig inkomst|0
+50|Inneh├Ñller|Ins├ñttning|Inkomst - ├ûverf├Âringar eget konto|0
+51|Inneh├Ñller|Alektum|Utgift - Amortering skuld, skuldr├ñntor & avgifter, KFM|0
+52|Inneh├Ñller|service|Utgift - ├ûvriga utgifter|0
+53|Inneh├Ñller|Alectum|Utgift - Amortering skuld, skuldr├ñntor & avgifter, KFM|0
+54|Inneh├Ñller|klarna|Utgift - ├ûvriga utgifter|0
+55|Inneh├Ñller|centrala s|Utgift - ├ûvriga utgifter|0
+56|Inneh├Ñller|Hyresg├ñst|Utgift - ├ûvriga utgifter|0
+57|Inneh├Ñller|Arvada|Utgift - Amortering skuld, skuldr├ñntor & avgifter, KFM|0
+58|Inneh├Ñller|Lowell|Utgift - Amortering skuld, skuldr├ñntor & avgifter, KFM|0
+59|Inneh├Ñller|Kronofog|Utgift - Amortering skuld, skuldr├ñntor & avgifter, KFM|0
+60|Inneh├Ñller|Utvecklingsp|Utgift - ├ûvriga utgifter|0
+61|Inneh├Ñller|Arvode|Utgift - Arvode st├ñllf├Âretr├ñdare inkl. soc. avg. och utl├ñgg|0
+62|Inneh├Ñller|coop|Utgift - Hyra/Boende/Mat|0
+63|Inneh├Ñller|magasinet|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+64|Inneh├Ñller|systembolaget|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+65|Inneh├Ñller|kiosken|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+66|Inneh├Ñller|okq8|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+67|Inneh├Ñller|pizzeria|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+68|Inneh├Ñller|pressbyr├Ñn|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+69|Inneh├Ñller|swish|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+70|Inneh├Ñller|direkten|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+71|Inneh├Ñller|Ica|Utgift - Hyra/Boende/Mat|0
+72|Inneh├Ñller|lidl|Utgift - Hyra/Boende/Mat|0
+73|Inneh├Ñller|cliro|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+74|Inneh├Ñller|Kortk├Âp|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+75|Inneh├Ñller|bankomat|Utgift - Medel f├Âr eget bruk/Eget uttag|0
+76|Inneh├Ñller|LF|Utgift - F├Ârs├ñkringar|0
+77|Inneh├Ñller|Folksam|Utgift - F├Ârs├ñkringar|0
+78|Inneh├Ñller|L├ñnsf├Ârs├ñkringar|Utgift - F├Ârs├ñkringar|0
+79|Inneh├Ñller|F├Ârs├ñkring|Utgift - F├Ârs├ñkringar|0
+80|Inneh├Ñller|Trygg|Utgift - F├Ârs├ñkringar|0
+81|Inneh├Ñller|G├Âta|Utgift - TV/Tele/El|0
+82|Inneh├Ñller|hallon|Utgift - TV/Tele/El|0
+83|Inneh├Ñller|Vattenfall|Utgift - TV/Tele/El|0
+84|Inneh├Ñller|Telenor|Utgift - TV/Tele/El|0
+85|Inneh├Ñller|hi3G|Utgift - TV/Tele/El|0
+86|Inneh├Ñller|mobil|Utgift - TV/Tele/El|0
+87|Inneh├Ñller|Tele|Utgift - TV/Tele/El|0
+88|Inneh├Ñller|Telia|Utgift - TV/Tele/El|0
+89|Inneh├Ñller|Eon|Utgift - TV/Tele/El|0
+90|Inneh├Ñller|Fortum|Utgift - TV/Tele/El|0
+91|Inneh├Ñller|Comviq|Utgift - TV/Tele/El|0
+92|Inneh├Ñller|Runbyg├Ñrdar|Utgift - Hyra/Boende/Mat|10
+93|Inneh├Ñller|├Âverf├Âring|├ûverf├Âring Till R├ñkningskontot(inkomst)|5
+94|Inneh├Ñller|Vardagspaket|Bankavgifter|10
+95|Inneh├Ñller|kortk├Âp|MedelEgetBrukUttag|10
+96|Inneh├Ñller|UTBETALNING|├ûvrigInkomst|5
+97|Inneh├Ñller|Bankomat |MedelEgetBrukUttag|10
+98|Inneh├Ñller|Swish betalning|MedelEgetBrukUttag|10
+99|Inneh├Ñller|VISMA FINANC|Sjukv├ÑrdL├ñkarbes├ÂkApotek|5
+100|Inneh├Ñller|ins├ñttning|├ûvrigInkomst|10
+101|Inneh├Ñller|avslut |├ûverf├Âring Till R├ñkningskontot(inkomst)|0
+102|Inneh├Ñller|Skuldr├ñnta|AmorteringSkuldAvgift|10
+103|Inneh├Ñller|├Âverf├Âring|├ûverf├Âring Fr├Ñn R├ñkningskontot(utgift)|5
+104|Inneh├Ñller|Swish inbetalning|├ûvrigInkomst|10
+105|Inneh├Ñller|Tandv├Ñrd|Sjukv├ÑrdL├ñkarbes├ÂkApotek|0
+106|Inneh├Ñller|hyra|HyraBoendeMat|10
+107|Inneh├Ñller|FOLKTANDV├àRD|Sjukv├ÑrdL├ñkarbes├ÂkApotek|10
+108|Inneh├Ñller|TRYGG-HANSA|F├Ârs├ñkringar|10
+109|Inneh├Ñller|HABERS|HABErs├ñttning|10
+110|Inneh├Ñller|Mathem|├ûvrigUtgift|10
+111|Inneh├Ñller|F-kassan|L├ÂnerPensioner|0
+112|Inneh├Ñller|HAB |HABErs├ñttning|0
+113|Inneh├Ñller|Svea|Sjukv├ÑrdL├ñkarbes├ÂkApotek|0
+114|Inneh├Ñller|Fotv├Ñrd|Sjukv├ÑrdL├ñkarbes├ÂkApotek|10
+115|Inneh├Ñller|Apot|Sjukv├ÑrdL├ñkarbes├ÂkApotek|0
+116|B├ÂrjarMed|SK|Skatte├Ñterb├ñring|10
+
+=== TABELL: Overformyndare  (rader: 9) ===
+0|ID|INTEGER|0||1
+1|Namn|TEXT|0||0
+2|Adress|TEXT|0||0
+3|Postnummer|TEXT|0||0
+4|Postort|TEXT|0||0
+5|Telefon|TEXT|0||0
+6|Epost|TEXT|0||0
+7|KOMMUN_VAXEL|TEXT|0||0
+
+ID|Namn|Adress|Postnummer|Postort|Telefon|Epost|KOMMUN_VAXEL
+1|J├ñrf├ñlla Kommun ├ûverf├Ârmyndarenheten|Riddarplatsen 5|177 30|J├ñrf├ñlla|||
+2|Stockholms Stad ├ûverf├Ârmyndarf├Ârvaltningen|Fleminggatan 14|112 26|Stockholm|||
+3|Sundbybergs ├ûverf├Ârmyndarkansli|||Sundbyberg|||
+4|├ûverf├Ârmyndaren i Norrort|||Sollentuna|||
+5|S├Âdert├Ârns ├ûverf├Ârmyndarn├ñmnd|Rudsj├Âterrassen 2|136 81 |Haninge| 08- 606 70 20|overformyndaren@haninge.se|
+6|├ûverf├Ârmyndaren i Norrt├ñlje||||||
+7|Solna stad ├ûverf├Ârmyndarkansliet|Statshusg├Ñngen 2|171 86|Solna|08-746 10 00|overformyndarnamnden@solna.se|
+8|Nacka kommun ├ûverf├Ârmyndarenheten|Granitv├ñgen 15|131 81|Nacka|08-718 80 00|overformyndaren@nacka.se|
+9|J├ñrf├ñlla ├Âverf├Ârmyndarn├ñmnd||||||
+
+=== TABELL: PdfFieldMappings  (rader: 0) ===
+0|ID|INTEGER|0||1
+1|TemplateID|INTEGER|1||0
+2|PdfFieldName|TEXT|1||0
+3|DbColumnName|TEXT|1||0
+
+
+=== TABELL: PdfTemplates  (rader: 5) ===
+0|ID|INTEGER|0||1
+1|TemplateName|TEXT|1||0
+2|OriginalFilename|TEXT|1||0
+3|StoredFilename|TEXT|1||0
+4|CreatedAt|TIMESTAMP|0|CURRENT_TIMESTAMP|0
+
+ID|TemplateName|OriginalFilename|StoredFilename|CreatedAt
+2|Upplands V├ñsby|Ansokan_Upplands_Vasby.pdf|Ansokan_Upplands_Vasby.pdf|2025-10-15 19:02:20
+3|J├ñrf├ñlla|Ansokan_Jarfalla.pdf|Ansokan_Jarfalla.pdf|2025-10-15 19:02:20
+4|Sigtuna|Ansokan_Sigtuna.pdf|Ansokan_Sigtuna.pdf|2025-10-15 19:02:20
+5|Solna|Ansokan_Solna.pdf|Ansokan_Solna.pdf|2025-10-15 19:02:20
+6|Stockholm|Ansokan_Stockholm.pdf|Ansokan_Stockholm.pdf|2025-10-15 19:02:20
+
+=== TABELL: huvudman  (rader: 9) ===
+0|PERSONNUMMER|TEXT|1||1
+1|FORNAMN|TEXT|0||0
+2|EFTERNAMN|TEXT|0||0
+3|HELT_NAMN|TEXT|0||0
+4|ADRESS|TEXT|0||0
+5|POSTNUMMER|TEXT|0||0
+6|ORT|TEXT|0||0
+7|VISTELSEADRESS|TEXT|0||0
+8|VISTELSEPOSTNR|TEXT|0||0
+9|VISTELSEORT|TEXT|0||0
+10|TELEFON|TEXT|0||0
+11|MOBIL|TEXT|0||0
+12|EPOST|TEXT|0||0
+13|MEDBORGARSKAP|TEXT|0||0
+14|CIVILSTAND|TEXT|0||0
+15|SAMMANBOENDE|INTEGER|0||0
+16|MEDSOKANDE_FORNAMN|TEXT|0||0
+17|MEDSOKANDE_EFTERNAMN|TEXT|0||0
+18|MEDSOKANDE_PERSONNUMMER|TEXT|0||0
+19|MEDSOKANDE_MEDBORGARSKAP|TEXT|0||0
+20|MEDSOKANDE_CIVILSTAND|TEXT|0||0
+21|MEDSOKANDE_SYSSELSATTNING|TEXT|0||0
+22|CLEARINGNUMMER|TEXT|0||0
+23|KONTONUMMER|TEXT|0||0
+24|BANKNAMN|TEXT|0||0
+25|OVERFORMYNDARE_ID|INTEGER|0||0
+26|BOENDE_NAMN|TEXT|0||0
+27|BOSTAD_TYP|TEXT|0||0
+28|BOSTAD_ANTAL_RUM|INTEGER|0||0
+29|BOSTAD_ANTAL_BOENDE|INTEGER|0||0
+30|BOSTAD_KONTRAKTSTID|TEXT|0||0
+31|SYSSELSATTNING|TEXT|0||0
+32|INKOMSTTYP|TEXT|0||0
+33|DEKLARERAT_STATUS|TEXT|0||0
+34|ARVODE_UTBETALT_STATUS|INTEGER|0||0
+35|MERKOSTNADSERSTATTNING_STATUS|INTEGER|0||0
+36|ARSR_OVRIGA_UPPLYSNINGAR|TEXT|0||0
+37|ERSATTNING_ANNAN_MYNDIGHET_STATUS|INTEGER|0||0
+38|ERSATTNING_ANNAN_MYNDIGHET_FRAN|TEXT|0||0
+39|HYRA|REAL|0||0
+40|EL_KOSTNAD|REAL|0||0
+41|FACK_AVGIFT_AKASSA|REAL|0||0
+42|RESKOSTNADER|REAL|0||0
+43|HEMFORSAKRING|REAL|0||0
+44|MEDICIN_KOSTNAD|REAL|0||0
+45|LAKARVARDSKOSTNAD|REAL|0||0
+46|BARNOMSORG_AVGIFT|REAL|0||0
+47|FARDTJANST_AVGIFT|REAL|0||0
+48|AKUT_TANDVARDSKOSTNAD|REAL|0||0
+49|BREDBAND|REAL|0||0
+50|OVRIG_KOSTNAD_BESKRIVNING|TEXT|0||0
+51|OVRIG_KOSTNAD_BELOPP|REAL|0||0
+52|ARBETSLOSHETSERSTATTNING|REAL|0||0
+53|AVTALSFOrSAKRING_AFA|REAL|0||0
+54|BARNBIDRAG_STUDIEBIDRAG|REAL|0||0
+55|BOSTADSBIDRAG|REAL|0||0
+56|ETABLERINGSERSATTNING|REAL|0||0
+57|BARNS_INKOMST|REAL|0||0
+58|HYRESINTAKT_INNEBOENDE|REAL|0||0
+59|LON|REAL|0||0
+60|PENSION_LIVRANTA_SJUK_AKTIVITET|REAL|0||0
+61|SJUKPENNING_FORALDRAPENNING|REAL|0||0
+62|SKATTEATERBARING|REAL|0||0
+63|STUDIEMEDEL|REAL|0||0
+64|UNDERHALLSSTOD_EFTERLEVANDEPENSION|REAL|0||0
+65|VANTAD_INKOMST_BESKRIVNING|TEXT|0||0
+66|VANTAD_INKOMST_BELOPP|REAL|0||0
+67|OVRIG_INKOMST_BESKRIVNING|TEXT|0||0
+68|OVRIG_INKOMST_BELOPP|REAL|0||0
+69|TILLGANG_BANKMEDEL_VARDE|REAL|0||0
+70|TILLGANG_BOSTADSRATT_FASTIGHET_VARDE|REAL|0||0
+71|TILLGANG_FORDON_MM_VARDE|REAL|0||0
+72|SKULD_KFM_VARDE|REAL|0||0
+73|FORORDNANDE_DATUM|TEXT|0||0
+74|SALDO_RAKNINGSKONTO_FORORDNANDE|REAL|0||0
+75|HANDLAGGARE|TEXT|0||0
+76|KontaktpersonNamn|TEXT|0||0
+77|KontaktpersonTel|TEXT|0||0
+78|HANDLAGGARE_LSS|TEXT|0||0
+79|HANDLAGGARE_SOCIAL|TEXT|0||0
+80|HYRESVARD_NAMN|TEXT|0||0
+81|BUDGET_INKOMSTER_NETTO_MANAD|REAL|0||0
+82|BUDGET_UTGIFTER_VERIFIERADE_MANAD|REAL|0||0
+83|BUDGET_RESULTAT_MANAD|REAL|0||0
+84|FickpengTotalVecka|REAL|0||0
+85|FickpengMondag|REAL|0||0
+86|FickpengTisdag|REAL|0||0
+87|FickpengOnsdag|REAL|0||0
+88|FickpengTorsdag|REAL|0||0
+89|FickpengFredag|REAL|0||0
+90|KFM_SKULDFORANDRING|REAL|0||0
+91|KFM_LAST_CHECKED_AT|TEXT|0||0
+92|KFM_CASE_NO|TEXT|0||0
+93|KFM_STATUS|TEXT|0||0
+94|OVERFORMYNDAR_NAMN|TEXT|0||0
+95|BoendeKontaktpersonNamn|TEXT|0||0
+96|BoendeKontaktpersonTel|TEXT|0||0
+97|Omsorgsavgift|REAL|0||0
+98|FickpengarManad|REAL|0||0
+99|PensionLeverantor|TEXT|0||0
+100|BostadsbidragLeverantor|TEXT|0||0
+101|HyraLeverantor|TEXT|0||0
+102|OmsorgsavgiftLeverantor|TEXT|0||0
+103|ElLeverantor|TEXT|0||0
+104|HemforsakringLeverantor|TEXT|0||0
+105|LakarvardskostnadLeverantor|TEXT|0||0
+106|MedicinLeverantor|TEXT|0||0
+107|BredbandLeverantor|TEXT|0||0
+108|FickpengarLeverantor|TEXT|0||0
+
+PERSONNUMMER|FORNAMN|EFTERNAMN|HELT_NAMN|ADRESS|POSTNUMMER|ORT|VISTELSEADRESS|VISTELSEPOSTNR|VISTELSEORT|TELEFON|MOBIL|EPOST|MEDBORGARSKAP|CIVILSTAND|SAMMANBOENDE|MEDSOKANDE_FORNAMN|MEDSOKANDE_EFTERNAMN|MEDSOKANDE_PERSONNUMMER|MEDSOKANDE_MEDBORGARSKAP|MEDSOKANDE_CIVILSTAND|MEDSOKANDE_SYSSELSATTNING|CLEARINGNUMMER|KONTONUMMER|BANKNAMN|OVERFORMYNDARE_ID|BOENDE_NAMN|BOSTAD_TYP|BOSTAD_ANTAL_RUM|BOSTAD_ANTAL_BOENDE|BOSTAD_KONTRAKTSTID|SYSSELSATTNING|INKOMSTTYP|DEKLARERAT_STATUS|ARVODE_UTBETALT_STATUS|MERKOSTNADSERSTATTNING_STATUS|ARSR_OVRIGA_UPPLYSNINGAR|ERSATTNING_ANNAN_MYNDIGHET_STATUS|ERSATTNING_ANNAN_MYNDIGHET_FRAN|HYRA|EL_KOSTNAD|FACK_AVGIFT_AKASSA|RESKOSTNADER|HEMFORSAKRING|MEDICIN_KOSTNAD|LAKARVARDSKOSTNAD|BARNOMSORG_AVGIFT|FARDTJANST_AVGIFT|AKUT_TANDVARDSKOSTNAD|BREDBAND|OVRIG_KOSTNAD_BESKRIVNING|OVRIG_KOSTNAD_BELOPP|ARBETSLOSHETSERSTATTNING|AVTALSFOrSAKRING_AFA|BARNBIDRAG_STUDIEBIDRAG|BOSTADSBIDRAG|ETABLERINGSERSATTNING|BARNS_INKOMST|HYRESINTAKT_INNEBOENDE|LON|PENSION_LIVRANTA_SJUK_AKTIVITET|SJUKPENNING_FORALDRAPENNING|SKATTEATERBARING|STUDIEMEDEL|UNDERHALLSSTOD_EFTERLEVANDEPENSION|VANTAD_INKOMST_BESKRIVNING|VANTAD_INKOMST_BELOPP|OVRIG_INKOMST_BESKRIVNING|OVRIG_INKOMST_BELOPP|TILLGANG_BANKMEDEL_VARDE|TILLGANG_BOSTADSRATT_FASTIGHET_VARDE|TILLGANG_FORDON_MM_VARDE|SKULD_KFM_VARDE|FORORDNANDE_DATUM|SALDO_RAKNINGSKONTO_FORORDNANDE|HANDLAGGARE|KontaktpersonNamn|KontaktpersonTel|HANDLAGGARE_LSS|HANDLAGGARE_SOCIAL|HYRESVARD_NAMN|BUDGET_INKOMSTER_NETTO_MANAD|BUDGET_UTGIFTER_VERIFIERADE_MANAD|BUDGET_RESULTAT_MANAD|FickpengTotalVecka|FickpengMondag|FickpengTisdag|FickpengOnsdag|FickpengTorsdag|FickpengFredag|KFM_SKULDFORANDRING|KFM_LAST_CHECKED_AT|KFM_CASE_NO|KFM_STATUS|OVERFORMYNDAR_NAMN|BoendeKontaktpersonNamn|BoendeKontaktpersonTel|Omsorgsavgift|FickpengarManad|PensionLeverantor|BostadsbidragLeverantor|HyraLeverantor|OmsorgsavgiftLeverantor|ElLeverantor|HemforsakringLeverantor|LakarvardskostnadLeverantor|MedicinLeverantor|BredbandLeverantor|FickpengarLeverantor
+700207-0659|Asad|Nawaz|Asad Nawaz|SLEIPNERGATAN 60|195 54|M├äRSTA|||||0730 506 032|lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+9900103-0643|Mona|Chahboun|Chahboun Mona|Esl├Âvsv├ñgen 13 Lgh 1102|121 51|JOHANNESHOV|||||0730-50 60 32|lars-lindberg@live.se||||||||||3300|900103-0643|Nordea|2|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+95070225-0084|Eva|Rundstr├Âm|Rundstr├Âm, Eva|Gribbov├ñgen 85 A|192 52|SOLLENTUNA|||||0730 506 032|lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19871113-0024|Louise|Lindahl|Louise Lindahl|Vretv├ñgen 10|757 56|UPPSALA|||||0730-506032|lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+900810-2312|Alexander|Ekblom|Bj├Ârn Alexander Ekblom|Bollbacken 9|195 42|M├äRSTA|Bollbacken 9|195 42|M├äRSTA|0730 506 032||lars-lindberg@live.se|Svensk|||||||||3300|900810-2312|Nordea|3087|Odenbackens Gruppbostad|Hyresr├ñtt|||||Sjukers├ñttning||0|0||||7180.0|160.86|0.0|0.0|111.83||207.5||0.0||528.0|Bankavgifter (Nordea Vardagspaket)|39.0||||5703.0||||0.0|13275.0|||||||||30357.51|0.0|20932.0|0.0||||Lars Lindberg|073 05 06 032||Maria Van Der eelide|Sigtuna kommun|16878.0|12430.9|-937.38|37293.99||||||0.0|||Skuldfri|||||||||||||||
+19661128-7472|Abdelali|Qzaibri|Abdelali Qzaibri|c/o Halima Jamo Awale S├Ñngv├ñgen 56 lgh 1502|177 36|J├äRF├äLLA||||07000000|073333333||Svensk|Ensamst├Ñende|0|||||||1234-7|567 801 255-1|Nordea|1|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19490723-1171|Ron|Radhe|Ron Hans Radhe|Solnav├ñgen 102 A|169 51|SOLNA|||||0730 506 032|lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19470128-1539|Tommy|Elmenbeck|Tommy Elmenbeck|H├Ñstastigen 9 A Lgh 1209|197 30|BRO|||||073-0506032|lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19490502-0345|Sandra|Marotta Bezbrozh|Marotta Bezbrozh, Sandra|R├Ânninge Skolv├ñg 24 Lgh 1127|144 62|R├ûNNINGE||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19300820-9466|Ulla|Linde|Ulla Irmeli Linde|H├äSTSKOV├äGEN 63 LGH 1001|196 35|KUNGS├äNGEN||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19841211-7403|Olivia|Aguayo|Aguayo Aguayo, Olivia Andrea|Centralv├ñgen 19|145 57|Upplands V├ñsby||||||||||||||||3001|04 89754|Nordea|4|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+980922-0115|Tony|Olsson|Tony Olsson|CENTRALV├äGEN 19|194 76|UPPLANDS V├äSBY||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19850627-0308|Marie|Blomgren|Marie Blomgren|Drabantv├ñgen 1 Lgh 1102|177 50|J├äRF├äLLA||||||||||||||||4171|00 85602|Nordea Bank Abp, filial i Sverige||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+20020812-0311|Mursalin|Dost|Mursalin Dost|Skogsklockegr├ñnden 23 Lgh 1101|174 47|SUNDBYBERG||||||||||||||||4171|03 14199|Nordea|3|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19940401-0192|Georgios|├àstr├Âm|Georgios ├àstr├Âm|Margaretav├ñgen 13 Lgh 1101|177 56|J├äRF├äLLA||||||||||||||||8327-9|884733502-6|Swedbank AB (publ)||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19660916-7835|Kalle|Backman|KALLE Roland Backman|B├äGARFRUV├äGEN 18 LGH 1004|12867|SK├ûNDAL||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19841117-7853|Andr├®|Vikner||HALLONV├äGEN 94 LGH 1002|196 35|KUNGS├äNGEN|||||||Svensk|Sambo||||||||||Nordea||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19951012-3350|Nicklas|Cholpitak Ekman|Nicklas Cholpitak Ekman|Anderstorpsv├ñgen 2 Lgh 1203|171 51|SOLNA||||||||||||||||8327-9|934 871 002-2|Swedbank||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+040716-0558|Ryan|Aiga|Ryan Aiga|MALMV├äGEN 16C|191 60|SOLLENTUNA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19950504-3217|Bavo|Berdman|Bavo Berdman|Barkarbyv├ñgen 38 Lgh 1201|177 45|J├äRF├äLLA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19540223-7902|Birgit|Idehult|Birgit Idehult|NORRG├àRDSV├äGEN 13 LGH 1026|197 30|BRO||||||||||||||||3075|01 78671|Nordea Bank Abp, filial i Sverige||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19710113-6427|Pernilla|Brokstad|Astrid Pernilla Brokstad|Fanjunkarsspr├Ñng 8 Lgh 1104|177 43|J├äRF├äLLA||||||||||||||||3273|02 54501|Nordea Bank Abp, filial i Sverige|1|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19790203-4516|Nurel|Aliyev|Nurel Aliyev|Termov├ñgen 70 Lgh 1204|176 77|J├äRF├äLLA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19380211-9507|Elisabet|Lindgren|Elisabet Marianne Lindgren|Knallev├ñgen 4|177 60|J├äRF├äLLA||||||||||||||||3259|02 55098|Nordea Bank Abp, filial i Sverige||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19651012-1244|Anita|Stahl||Tegv├ñgen 12 Lgh 1202|175 53|J├äRF├äLLA||||07000000|0730 506 034|||||||||||||Nordea|1|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19820613-0448|Diana|Mossberg|Diana Mossberg|Termov├ñgen 58 Lgh 1103|176 77|J├äRF├äLLA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19500719-0233|Lars|Bystr├Âm|Bystr├Âm Lars G├Âran|Gyllenborgsgatan 6 Lgh 1101|112 43|STOCKHOLM|||||||||||||||||||2|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+840804-7796|Mina|Said|Mina Said|LYCKOSTIGEN 3B|195 36|M├äRSTA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+841030-0282|Tanja|Hagelin Juvas|Tanja Hagelin Juvas|TINGVALLAV├äGEN 40B|195 32|M├äRSTA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19540708-8524|Ulla|Johansson|Johansson, Ulla|Nibblev├ñgen 23 Lgh 1002|177 36|J├äRF├äLLA||||||||||||||||3259|02 05015|Nordea Bank Abp, filial i Sverige|1|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19970126-0094|Jakob|Lindblom|Jakob Lindblom|Korpralsv├ñgen 2 Lgh 1003|177 43|J├äRF├äLLA|||||073-0506032|lars-lindberg@live.se||||||||||4024|00 06867|Nordea Bank Abp, filial i Sverige||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+490707-2807|Eva Marita|Palma|Eva Marita Palma|STATIONSGATAN 5A|195 41|M├äRSTA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19770613-7911|Kim|Sj├Âberg|Kim Sj├Âberg|Emmylundsv├ñgen 3|171 72|SOLNA||||||||||||||||8286-7|963071432-8|Sidensj├Â Sparbank||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19860607-8544|Emelie|V├ñnnberg|V├ñnnberg Emelie|||||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+430127-1229|Lillebil|Rosenstam|Lillebil Rosenstam|MIDG├àRDSV├äGEN 14F|195 57|M├äRSTA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19960331-2654|Arthur|R├ñtt├Â||Utflyktsv├ñgen 56|168 41|BROMMA|||||||Svensk|Ensamst├Ñende||||||||||Swedbank||Hos f├Âr├ñldrarna||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19681215-0057|Niclas|Bergqvist|Bergqvist, Niclas Fredrik|Bergsh├Âjden 8, lgh 1302|174 45|Sundbyberg||||||||||||||||8327-9|693 992 524-1|Swedbank|3|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+760811-9314|Karl|M├Ñrtensson|Karl Roland M├Ñrtensson|S├ûDERGATAN 17B|195 47|M├äRSTA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19940119-0195|Martin|Eklund|Martin Erik Eklund|Hagalundsgatan 3 Lgh 1102|169 65|SOLNA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19840825-0218|Gustav|Karlin|Karlin, Gustav|Hagalundsgatan 25 Lgh 2304|169 62|SOLNA||||||lars-lindberg@live.se|Svensk|Gift|0|||||||6920|702 900 818|Handelsbanken|1|||||||||0||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19610103-0101|Christina|Landgraff|Landgraff Christina|Nordmarksv├ñgen 42 Lgh 1203|123 72|FARSTA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19781109-0237|Jens|├ûrneholm|├ûrneholm, Jens|KANTARELLV├äGEN 147 LGH 1003|186 55|VALLENTUNA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+491024-0078|Kjell|Karlsson|Kjell Bertil Karlsson|MAGNEGATAN 58|195 57|M├äRSTA||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19780823-0036|Mikael|Tuhti|Tuhti, Mikael|Jupitergatan 10|195 56|M├ñrsta||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19880827-0113|Mattias|Hellman|Hellman, Mattias|Klippgatan 20 A Lgh 1205|171 47|SOLNA||||||lars-lindberg@live.se||||||||||8327-9|924 293 782-0|Swedbank||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19840311-4195|Patrik|Widqvist|Widqvist, Patrik|Guldregnsstigen 1 B|149 50|NYN├äSHAMN||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19641111-6731|Joseph|Toma Jackob|Toma Jackob Joseph|V├ñstertorpsv├ñgen 83 Lgh 1201|129 46|H├äGERSTEN||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19901003-0097|Mussie|Gebre|Mussie Gebre|L├Âtsj├Âv├ñgen 45 Lgh 1203|174 43|SUNDBYBERG||||||lars-lindberg@live.se|Svensk|Ensamst├Ñende|||||||||||||LSS-boende||1|tillsvidare|sjukskriven|sjukpenning||0||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+791019-0466|Grammatia|Theodoru|Grammatia Theodoru|FLOTTV├äGEN 8|195 65|STENINGEH├ûJDEN||||||lars-lindberg@live.se||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19940310-0549|Nathalie|Heymann|Heymann Nathalie|c/o Emiljans Gruppboende Skyllbergsstigen 1 Lgh 1207|124 71|BANDHAGEN||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19840910-0370|Pablo|Martinez|Martinez Pablo|Skebok├ñrrsv├ñgen 312 Lgh 1606|124 50|BANDHAGEN||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19790926-0460|Riitta|Ven├ñl├ñinen|Ven├ñl├ñinen, Riitta|Diagnosv├ñgen 9 B Lgh 1302|141 53|HUDDINGE||||||||||||||||3273|02 16502||5|Daglig verksamhet||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+541022-3118|Robert|Karlsson|Robert Karlsson|c/o VILLA TOLLARE TOLLAR├ûV├äGEN 2|132 49|SALTSJ├û-BOO||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+831003-8388|Somayeh|Kamani|Somayeh Kamani|V├Ñrfrugillet servicebostad, ├àlgrytev├ñgen 122|127 31|Sk├ñrholmen||||072 834 18 95|072 834 18 95|||||||||||3300|831003-8388|Nordea|2|V├Ñrfrugillet servicebostad||||||F├Ârs├Ârjningsst├Âd|ja|0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+731120-0245|Ther├®se|Halvorsen|Ther├®se Halvorsen|LILLSV├äNGEN 13|134 67|INGAR├û||||||||Ogift|1||||||||||8|||||||||0||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19820820-0090|Thomas|Eriksson|Eriksson, Thomas|Marmorv├ñgen 48|193 41|Sigtuna||||||||||||||||8327-9|694849718-2|Swedbank AB (publ)||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19671123-0117|Thomas|Mithander|Andersson, Thomas|c/o V├ñstberg J├ñrnv├ñgsgatan 23 Lgh 1605|172 75|SUNDBYBERG||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19730526-3183|Treetharnthip|Phatrot|Phatrot, Treetharnthip|Hagalundsgatan 17 Lgh 1603|169 65|SOLNA||||||||||||||||8327-9|903971489-5|Swedbank AB (publ)||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19591103-0087|Annika|Wilhelmsson|Annika Wilhelmsson|Stopv├ñgen 116 Lgh 1302|168 36|Bromma||||||||||||||||746|999402|Handelsbanken AB (publ)||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19890913-0612|Harald|Watanabe|Harald Andersson Watanabe|V├ñstra V├ñgen 7 D Lgh 1303|169 61|SOLNA||||||||||||||||8327-9|694699512-0|Swedbank AB (publ)||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+20010408-4322|Heena|Maqsudi|Heena Maqsudi|Dammtorps All├® 15 Lgh 1304|170 62|SOLNA||||||||||||||||8327-9|734476058-7|Swedbank AB (publ)||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19700107-0239|Jan-Erik|N├ñppi|Jan-Erik N├ñppi|Blomsterv├ñgen 11 B|176 74|J├äRF├äLLA|||||||Svensk|Ensamst├Ñende|0|||||||8327-9|23 549 738-5|Swedbank|1|||||||||0||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19730111-0339|Jesper|Gillners|Gillners, Jesper|V├äSTERV├äGEN 15 LGH 1001|191 49|SOLLENTUNA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19920109-6733|Josef|Shin|Shin, Josef|FORSV├äGEN 29|187 66|T├äBY||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19500803-2483|Marianne|Hammarin|Hammarin Marianne|Forssk├Ñlsgatan 48 Lgh 1201|123 31|FARSTA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+20010710-2436|Mohamed|Ahmed Ahmed|Mohamed Ahmed Ahmed|Tisslingeplan 72 Lgh 1002|163 61|SP├àNGA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19970608-8615|Hirbod|Ghadirzadehtoosi|Sekretess, Sekretess|Vallby Ekn├ñs 11|745 98|Enk├Âping||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19400724-1229|Irene|Raam|Raam Irene Calma|Kamreraregatan 2 B Lgh 1105|115 38|STOCKHOLM||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+550919-0046|Annette|Bernander|Annette Bernander|C/O M├Ñsen|133 41|Saltsj├Âbaden|Fisks├ñtra Torg 18|133 41|Saltsj├Âbaden|||||||||||||||Swedbank / Tj├Ârns Sparbank||M├Ñsen|Bostad med s├ñrskild service (grupp-/servicebostad enl. LSS)|||||Pension|||||||5840.0||||100.17||374.0||28.67|||Medicinsk fotv├Ñrd/Hemhj├ñlp|349.17||||0.0|||||11858.0|||||||||4053735.82||20932.0|0.0||||Mimmi Nordberg (Aldreenshet)|087187565||Maria Van Der eelide|Nacka kommun|10417.0|16068.92|-5651.92||||||||||Skuldfri|Nacka kommun||||||||||||||
+19550715-2816|Baba|Camara|Camara Baba|Havs├Ârnsv├ñgen 6 Lgh 1002|123 49|FARSTA||||||||||||||||3273|02 28543|Nordea|2|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19300629-6200|Berit|Stenkel|Stenkel Berit Elly Margareta|Annedalsv├ñgen 47 Lgh 1704|168 46|├äLVSJ├û||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19770404-0539|Bj├Ârn|Carp|Carp, Bj├Ârn|M├ñlar├Â Torg 7B|178 30|EKER├û||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19701010-2965|Britta|Flemk|Flemk Britta|Halmstadsv├ñgen 31 Lgh 1001|121 53|JOHANNESHOV||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19310329-7788|Christina|Ljungqvist |Engstr├Âm Ljungqvist Christina Margareta|├ûSTERSK├äRSV├äGEN 2 LGH 1303|184 53|├àKERSBERGA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19940725-1413|Daniel|Hashemi Mattisen |Hashemi Mattisen Daniel|Torvstr├Âv├ñgen 26 Lgh 1003|127 38|SK├äRHOLMEN||||||||||||||||3300|940725-1413|Nordea|2|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19750201-0676|Filinta|Sener|Sener Filinta|Hildebergsv├ñgen 4 Lgh 1001|117 62|STOCKHOLM||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19651222-0655|Foad Pour|Nayriz|Nayriz, Foad Pour|c/o Edebovikens gruppboende Sk├ñrstav├ñgen 2 B, lgh 0901|764 30|HALLSTAVIK||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+800926-0418|Fredrik|Lundkvist|Fredrik Lundkvist|TINGVALLAV├äGEN 9D|195 31|M├äRSTA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19970225-5473|Yasin|Akhter Johansson|Akhter Johansson Yasin|BERGSK├äLLAV├äGEN 32|192 79|SOLLENTUNA||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+480622-1075|Ture|Jensen|Ture Christian Jensen|ORMNINGERINGEN 78|132 33|SALTSJ├û-BOO||||||||||||||||3300|480622-1075|Nordea||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19530112-1595|Veikko|J├ñntti|J├ñntti, Veikko Tapani|Bollmorav├ñgen 2 Lgh 1305|135 40|TYRES├û||||||||||||||||||||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+20001107-2774|Victor|├àbergh|├àbergh, Victor|Idrottsv├ñgen 6 Lgh 1001|170 71|SOLNA|||||||Svensk|Ensamst├Ñende|0|||||||5329|02 174 34|SEB|7|||||||||0||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19781020-0464|Anna-Karin|Str├Âm||Bromsbodav├ñgen 31 A lgh 1103|194 42|Upplands V├ñsby|||||||||||||||||||||Hyresr├ñtt|2|1|tillsvidare|sjukskriven|F├Ârs├Ârjningsst├Âd|||||||4585.0|5485.0|5555.0|5555.0|5555.0|888.0|555.0|555.0|555.0|555.0|555.0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19510923-0127|Kerstin|Pihl||Lupinstigen 4 lgh 1002|136 73|Vendels├Â||||||||||||||||3270|00 80971|||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19510803-5774|Per-├àke|Jansson||Bergsh├Âjden 30 lgh 0801|174 45|Sundbyberg||||||||||||||||3300|510803-5774|Nordea|3|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19710701-0030|Rolf|Mattsson||Fj├ñllstigen 9 lgh 1004|761 73|Norrt├ñlje||||||||||||||||8242-0|33 515 868-9|Swedbank||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19390726-8746|Majne|Andersson||Norrg├Ñrdsh├Âjden 3 lgh 1102|184 36|├àkersberga||||||||||||||||6170|324 657 102|Handelsbanken||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19780403-0570|Jakob|Saeed||Vattenverksv├ñgen 3 lgh 1001|131 41|Nacka||||||||||||||||3300|780403-0570|Nordea||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19670928-8283|Layla|Al Majidi||H├ñllbybacken 9 lgh 1401|163 70|Sp├Ñnga||||||||||||||||1814|20 03953|Nordea|2|||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19840507-1575|Ferman Omar|Ali||Erik Sandbergs gata 40 lgh 1102|169 34|Solna||||||||||||||||4171|01 82985|||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19620125-0237|Kjell|Avander||Marknadsv├ñgen 271 lgh 1102|183 79|T├ñby||||||||||||||||3300|620125-0237|Nordea||||||||||0|0|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19650824-2796|Aiman Elias|Bolos||Malmv├ñgen 10 A|191 61|Sollentuna|||||||Svensk|Ensamst├Ñende|1|||||||6170|648 143 368|Handelsbanken|4||||||Sjukers├ñttning||||||||||||||||||||||||||||||||||||||||||2025-04-04|-362.35||||||||||||||||||||||||||||||||||
+19390209-4626|Anna-Lisa|Kizawi||||||||||||||||||||3300|390209-4626|Nordea|1|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+19560404-2910|Christer|Svensson|Christer Svensson|Novemberv├ñgen 17 Lgh 1013|17760|J├äRF├äLLA|||||||||||||||||||9||||||||||||||5490.0||||74.75||||231.17||||||||1064.0|||||14119.0||||||||||||55414.0||||||||J├ñrf├ñlla Kommun|15183.0|10715.26|4467.74|21749.0|0.0|0.0|0.0|0.0|0.0|4784.0|2024-12-31||p├Ñg├Ñende|J├ñrf├ñlla ├Âverf├Ârmyndarn├ñmnd||||||||||||||
+
+=== TABELL: users  (rader: 1) ===
+0|id|INTEGER|0||1
+1|username|TEXT|1||0
+2|password_hash|TEXT|1||0
+
+id|username|password_hash
+2|LarsLindberg|$argon2id$v=19$m=65536,t=4,p=1$Ukw2OGpLNmR1VktCeUFyNg$jOov+ySv871AscFVDwhvCf+NbZE2jUnOR7v8gHi1HIo
+

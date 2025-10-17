@@ -1,3 +1,5 @@
+console.log("[GODMAN_LOGIC] Script loaded - VERSION: 2025-10-16-FIXED-EVENTS-V3");
+
 document.addEventListener("DOMContentLoaded", function () {
   const navItems = document.querySelectorAll(".nav-item");
 
@@ -24,8 +26,15 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   });
-});// Definiera bara en gång (idempotent) för att undvika "already been declared"
-window.FS_TEMPLATE_IDS_BY_NAME = window.FS_TEMPLATE_IDS_BY_NAME || {
+});
+
+
+// Din befintliga kod börjar här...
+// ⚠️ INITIALIZATION GUARD - förhindrar dubbelregistrering av event listeners
+let appInitialized = false;
+
+// Globala mappningar för försörjningsstöd
+window.FS_TEMPLATE_IDS_BY_NAME = {
   "Upplands Väsby":  2,
   "Järfälla Kommun": 3,
   "Sigtuna Kommun":  4,
@@ -33,10 +42,13 @@ window.FS_TEMPLATE_IDS_BY_NAME = window.FS_TEMPLATE_IDS_BY_NAME || {
   "Stockholm Stad":  6
 };
 
-
-// Din befintliga kod börjar här...
-// ⚠️ INITIALIZATION GUARD - förhindrar dubbelregistrering av event listeners
-let appInitialized = false;
+window.FS_PDF_FILENAMES_BY_NAME = {
+  "Upplands Väsby":   "pdf_templates/Ansokan_Upplands_Vasby.pdf",
+  "Järfälla Kommun":  "pdf_templates/Ansokan_Jarfalla.pdf",
+  "Sigtuna Kommun":   "pdf_templates/Ansokan_Sigtuna.pdf",
+  "Solna Stad":       "pdf_templates/Ansokan_Solna.pdf",
+  "Stockholm Stad":   "pdf_templates/Ansokan_Stockholm.pdf"
+};
 
 let currentHuvudmanFullData = null;
 let allGodManProfiler = [];
@@ -59,7 +71,6 @@ let currentTemplateId = null; // Håller ID för mallen som redigeras
 let mappableDbColumns = []; // Cachad lista med databaskolumner
 let currentGeneratorData = null; // Håller all data för den PDF som ska genereras
 let allAutogiroForetag = []; // Cache för företag
-
 const PDF_FIELD_MAP = {
   Personnummer: "personnummer",
   Fornamn: "fornamn",
@@ -88,7 +99,34 @@ const PDF_FIELD_MAP = {
   FardtjanstAvgift: "fardtjanstAvgift",
   OvrigKostnadBeskrivning: "ovrigKostnadBeskrivning",
   OvrigKostnadBelopp: "ovrigKostnadBelopp",
+  Banknamn: "Bank_Sökande",
+  Clearingnummer: "Clearingnummer_Sökande",
+  Kontonummer: "Kontonummer_Sökande",
 };
+
+// 🔧 HELPER: Normalisera svenska talformat ("1 234,56" -> 1234.56)
+// Använd denna för alla parseFloat-operationer från input-fält
+function normalizeNumericInput(id) {
+  const raw = (document.getElementById(id)?.value ?? "").toString().trim();
+  if (raw === "") return null;
+  const cleaned = raw.replace(/\s/g, "").replace(",", ".");
+  const v = parseFloat(cleaned);
+  return Number.isNaN(v) ? null : v;
+}
+
+// 🔧 HELPER: Formatera värde för type="number" fält (punkt-format, ingen komma)
+// Använd denna när du sätter värden på type="number" input-element
+function formatForNumberInput(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const str = String(value).trim();
+  if (str === "") return "";
+  // Konvertera komma till punkt
+  const withDot = str.replace(",", ".");
+  const num = parseFloat(withDot);
+  if (Number.isNaN(num)) return "";
+  // Returnera som punkt-format string (browser kommer visa det korrekt enligt locale)
+  return num.toFixed(2);
+}
 
 const val = k => details?.[k] ?? ""; // helper
 // --- KONSTANTER FÖR ÅRSRÄKNING ---
@@ -196,9 +234,604 @@ window.FS_TEMPLATE_IDS_BY_FILE = window.FS_TEMPLATE_IDS_BY_FILE || {
   "Ansokan_Stockholm.pdf":      6,
 };
 
+window.FS_TEMPLATE_KEYS_BY_FILE = window.FS_TEMPLATE_KEYS_BY_FILE || {
+  "Ansokan_Upplands_Vasby.pdf":  "ansokan-upplands-vasby",
+  "Ansokan_Jarfalla.pdf":        "ansokan-jarfalla",
+  "Ansokan_Sigtuna.pdf":         "ansokan-sigtuna",
+  "Ansokan_Solna.pdf":           "ansokan-solna",
+  "Ansokan_Stockholm.pdf":       "ansokan-stockholm",
+};
+
 
 // Global state (som dina övriga currentFs* variabler)
 let currentFsTemplateId = null;
+
+// ============================================================================
+// GENERIC PDF MAPPER - Supporterar flera PDF-format med olika fältnamn
+// ============================================================================
+// Struktur: { "template-id-name": { name: "Display Name", fields: {...} } }
+// Du kan enkelt lägga till nya mallar här för nya PDF-format
+
+const PDF_TEMPLATES_CONFIG = {
+  "ansokan-upplands-vasby": {
+    name: "Ansökan om Försörjningsstöd (Upplands Väsby)",
+    file: "Ansokan_Upplands_Vasby.pdf",
+    fields: {
+      // Personuppgifter
+      "Sokande_Namn": ["FORNAMN", "EFTERNAMN"], // special: concat
+      "Sokande_Personnummer": "PERSONNUMMER",
+      "Medsokande_Namn": ["MEDSOKANDE_FORNAMN", "MEDSOKANDE_EFTERNAMN"], // special: concat
+      "Medsokande_Personnummer": "MEDSOKANDE_PERSONNUMMER",
+      
+      // Adress
+      "Adress": "ADRESS",
+      "Postnummer": "POSTNUMMER",
+      "Ort": "ORT",
+      
+      // Boende
+      "Boende_Namn": "BOENDE_NAMN",
+      "Boende_Typ": "BOSTAD_TYP",
+      "Boende_AntalRum": "BOSTAD_ANTAL_RUM",
+      "Boende_AntalBoende": "BOSTAD_ANTAL_BOENDE",
+      "Boende_Kontraktstid": "BOSTAD_KONTRAKTSTID",
+      
+      // Sysselsättning
+      "Sysselsattning": "SYSSELSATTNING",
+      "Inkomsttyp": "INKOMSTTYP",
+      
+      // Kostnader
+      "Kostnad_Hyra": "HYRA",
+      "Kostnad_ElKostnad": "EL_KOSTNAD",
+      "Kostnad_Hemforsakring": "HEMFORSAKRING",
+      "Kostnad_Reskostnader": "RESKOSTNADER",
+      "Kostnad_FackAvgift": "FACK_AVGIFT_AKASSA",
+      "Kostnad_Medicin": "MEDICIN_KOSTNAD",
+      "Kostnad_Lakarvard": "LAKARVARDSKOSTNAD",
+      "Kostnad_Barnomsorg": "BARNOMSORG_AVGIFT",
+      "Kostnad_Fardtjanst": "FARDTJANST_AVGIFT",
+      "Kostnad_Tandvard": "AKUT_TANDVARDSKOSTNAD",
+      "Kostnad_Bredband": "BREDBAND",
+      "Kostnad_Ovrig": "OVRIG_KOSTNAD_BELOPP",
+      
+      // Inkomster
+      "Inkomst_Lon": "LON",
+      "Inkomst_Pension": "PENSION_LIVRANTA_SJUK_AKTIVITET",
+      "Inkomst_Sjukpenning": "SJUKPENNING_FORALDRAPENNING",
+      "Inkomst_Arbetsloshetsersattning": "ARBETSLOSHETSERSTATTNING",
+      "Inkomst_Bostadsbidrag": "BOSTADSBIDRAG",
+      "Inkomst_Barnbidrag": "BARNBIDRAG_STUDIEBIDRAG",
+      "Inkomst_Underhallsstod": "UNDERHALLSSTOD_EFTERLEVANDEPENSION",
+      "Inkomst_Etablering": "ETABLERINGSERSATTNING",
+      "Inkomst_AktieIntakt": "HYRESINTAKT_INNEBOENDE",
+      "Inkomst_BarnsInkomst": "BARNS_INKOMST",
+      "Inkomst_Skatteaterbaring": "SKATTEATERBARING",
+      "Inkomst_Studiemedel": "STUDIEMEDEL",
+      "Inkomst_Ovrig": "OVRIG_INKOMST_BELOPP",
+      
+      // Datum & Handläggare
+      "Datum": "__TODAY__",
+      "Handlaggare": "HANDLAGGARE"
+    }
+  },
+  
+  "ansokan-jarfalla": {
+    name: "Ansökan om Försörjningsstöd (Järfälla)",
+    file: "Ansokan_Jarfalla.pdf",
+    fields: {
+      // Ansökan-metadata
+      "Ansokan_Jarfalla": "__FORM_TYPE__",
+      "Ansokan_Handlaggare": "HANDLAGGARE",
+      "Ansokan_Datum": "__TODAY__",
+      "Ansokan_AvserManad": "__MONTH__",
+      
+      // Personuppgifter - Sökande
+      "Sokande_Namn": ["FORNAMN", "EFTERNAMN"],
+      "Sokande_Personnummer": "PERSONNUMMER",
+      
+      // Personuppgifter - Medsökande
+      "Medsokande_Fornamn": "MEDSOKANDE_FORNAMN",
+      "Medsokande_Personnummer": "MEDSOKANDE_PERSONNUMMER",
+      "Medsokande_Efternamn": "MEDSOKANDE_EFTERNAMN",
+      
+      // God man
+      "God_man_Namn": "GODMAN_NAMN",
+      
+      // Bostad
+      "Bostad_Adress": "ADRESS",
+      "Bostad_Postnummer": "POSTNUMMER",
+      "Bostad_Ort": "ORT",
+      "Bostad_Typ_AnnanText": "BOSTAD_TYP",
+      "Bostad_AntalRum": "BOSTAD_ANTAL_RUM",
+      "Bostad_AntalBoende": "BOSTAD_ANTAL_BOENDE",
+      
+      // Kostnader/Utgifter
+      "Ansokan_Kostnad_Bredband": "INTERNET_BREDBAND",
+      "Ansokan_Kostnad_Hyra": "HYRA",
+      "Ansokan_Kostnad_Fackavgift": "FACKAVGIFT",
+      "Ansokan_Kostnad_Hemforsakring": "HEMFORSAKRING",
+      "Ansokan_Kostnad_Arbetsresor": "ARBETSKOSTNADER_RESOR",
+      "Ansokan_Kostnad_Hushallsel": "HUSHALLSEL",
+      "Ansokan_Kostnad_MedicinRecept": "MEDICIN_RECEPT",
+      "Ansokan_Kostnad_Lakarvard": "LAKARVARD",
+      "Ansokan_Kostnad_Barnomsorg": "BARNOMSORG",
+      "Ansokan_Kostnad_Fardtjanst": "FARDTJANST",
+      "Ansokan_Kostnad_AnnatText": "OVRIG_KOSTNAD_BESKRIVNING",
+      "Ansokan_Kostnad_AnnatBelopp": "OVRIG_KOSTNAD_BELOPP",
+      
+      // Datum & signatur
+      "Ort_Datum": "__TODAY__"
+    }
+  },
+  
+  "ansokan-solna": {
+    name: "Ansökan om Försörjningsstöd (Solna)",
+    file: "Ansokan_Solna.pdf",
+    fields: {
+      // Ansökan-metadata
+      "Ansokan_Solna": "__FORM_TYPE__",
+      "Ansokan_Datum": "__TODAY__",
+      "Ansokan_AvserAr": "__YEAR__",
+      "Ansokan_AvserManad": "__MONTH__",
+      "Ansokan_Handlaggare": "HANDLAGGARE",
+      
+      // Personuppgifter - Sökande
+      "Sokande_Namn": ["FORNAMN", "EFTERNAMN"],
+      "Sokande_Personnummer": "PERSONNUMMER",
+      "Sokande_Medborgarskap": "MEDBORGARSKAP",
+      
+      // Personuppgifter - Medsökande
+      "Medsokande_Fornamn": "MEDSOKANDE_FORNAMN",
+      "Medsokande_Personnummer": "MEDSOKANDE_PERSONNUMMER",
+      "Medsokande_Efternamn": "MEDSOKANDE_EFTERNAMN",
+      "Medsokande_Medborgarskap": "MEDSOKANDE_MEDBORGARSKAP",
+      
+      // God man
+      "God_man_Namn": "GODMAN_NAMN",
+      
+      // Bostad
+      "Bostad_Adress": "ADRESS",
+      "Bostad_Postnummer": "POSTNUMMER",
+      "Bostad_Ort": "ORT",
+      "Bostad_AntalRum": "BOSTAD_ANTAL_RUM",
+      "Bostad_AntalBoende": "BOSTAD_ANTAL_BOENDE",
+      "Bostad_Typ_AnnanText": "BOSTAD_TYP",
+      
+      // Kostnader/Utgifter
+      "Ansokan_Kostnad_Hyra": "HYRA",
+      "Ansokan_Kostnad_Fackavgift": "FACKAVGIFT",
+      "Ansokan_Kostnad_Arbetsresor": "ARBETSKOSTNADER_RESOR",
+      "Ansokan_Kostnad_Hushallsel": "HUSHALLSEL",
+      "Ansokan_Kostnad_Hemforsakring": "HEMFORSAKRING",
+      "Ansokan_Kostnad_MedicinRecept": "MEDICIN_RECEPT",
+      "Ansokan_Kostnad_Lakarvard": "LAKARVARD",
+      "Ansokan_Kostnad_Barnomsorg": "BARNOMSORG",
+      "Ansokan_Kostnad_Fardtjanst": "FARDTJANST",
+      "Ansokan_Kostnad_AnnatText": "OVRIG_KOSTNAD_BESKRIVNING",
+      "Ansokan_Kostnad_AnnatBelopp": "OVRIG_KOSTNAD_BELOPP",
+      
+      // Inkomster - Sökande
+      "Inkomst_Arbetslon_Sokande": "LON",
+      "Inkomst_Arbetslon_Datum_Sokande": "LON_DATUM",
+      "Inkomst_VantadDatum_Sokande": "VANTAD_INKOMST_DATUM",
+      "Inkomst_VantadVad_Sokande": "VANTAD_INKOMST_BESKRIVNING",
+      "Inkomst_OvrigDatum_Sokande": "OVRIG_INKOMST_DATUM",
+      "Inkomst_OvrigVad_Sokande": "OVRIG_INKOMST_BESKRIVNING",
+      "Inkomst_OvrigBelopp_Sokande": "OVRIG_INKOMST_BELOPP",
+      "Inkomst_SaknarHelt_Sokande": "SAKNAR_INKOMST",
+      "Inkomst_Barn_Sokande": "BARNBIDRAG_STUDIEBIDRAG",
+      "Inkomst_Barn_Datum_Sokande": "BARNBIDRAG_DATUM",
+      "Inkomst_HyraInneboende_Sokande": "HYRESINTAKT_INNEBOENDE",
+      "Inkomst_HyraInneboende_Datum_Sokande": "HYRESINTAKT_DATUM",
+      "Inkomst_Utlandet_Sokande": "INKOMST_UTLANDET",
+      "Inkomst_Utlandet_Datum_Sokande": "INKOMST_UTLANDET_DATUM",
+      "Inkomst_PrivPensionUnderhall_Sokande": "PENSION_LIVRANTA_SJUK_AKTIVITET",
+      "Inkomst_PrivPensionUnderhall_Datum_Sokande": "PENSION_DATUM",
+      "Inkomst_SpelLotteri_Sokande": "INKOMST_SPEL_LOTTERI",
+      "Inkomst_SpelLotteri_Datum_Sokande": "SPEL_LOTTERI_DATUM",
+      
+      // Inkomster - Medsökande
+      "Inkomst_Arbetslon_Medsokande": "MEDSOKANDE_LON",
+      "Inkomst_Arbetslon_Datum_Medsokande": "MEDSOKANDE_LON_DATUM",
+      "Inkomst_Barn_Medsokande": "MEDSOKANDE_BARNBIDRAG",
+      "Inkomst_Barn_Datum_Medsokande": "MEDSOKANDE_BARNBIDRAG_DATUM",
+      "Inkomst_HyraInneboende_Medsokande": "MEDSOKANDE_HYRESINTAKT",
+      "Inkomst_HyraInneboende_Datum_Medsokande": "MEDSOKANDE_HYRESINTAKT_DATUM",
+      "Inkomst_Utlandet_Medsokande": "MEDSOKANDE_INKOMST_UTLANDET",
+      "Inkomst_Utlandet_Datum_Medsokande": "MEDSOKANDE_INKOMST_UTLANDET_DATUM",
+      "Inkomst_PrivPensionUnderhall_Medsokande": "MEDSOKANDE_PENSION",
+      "Inkomst_PrivPensionUnderhall_Datum_Medsokande": "MEDSOKANDE_PENSION_DATUM",
+      "Inkomst_SpelLotteri_Medsokande": "MEDSOKANDE_SPEL_LOTTERI",
+      "Inkomst_SpelLotteri_Datum_Medsokande": "MEDSOKANDE_SPEL_LOTTERI_DATUM",
+      "Inkomst_VantadVad_Medsokande": "MEDSOKANDE_VANTAD_INKOMST_BESKRIVNING",
+      "Inkomst_VantadDatum_Medsokande": "MEDSOKANDE_VANTAD_INKOMST_DATUM",
+      "Inkomst_OvrigBelopp_Medsokande": "MEDSOKANDE_OVRIG_INKOMST_BELOPP",
+      "Inkomst_OvrigDatum_Medsokande": "MEDSOKANDE_OVRIG_INKOMST_DATUM",
+      
+      // Övrigt
+      "Ansokan_OvrigInfoHandlaggare": "ARSR_OVRIGA_UPPLYSNINGAR",
+      "Ansokan_UnderskriftOrtDatum_Sokande": "__TODAY__"
+    }
+  },
+  
+  "ansokan-sigtuna": {
+    name: "Ansökan om Försörjningsstöd (Sigtuna)",
+    file: "Ansokan_Sigtuna.pdf",
+    fields: {
+      // Ansökan-metadata
+      "Ansokan_Sigtuna": "__FORM_TYPE__",
+      "Ansokan_AvserManad": "__MONTH__",
+      
+      // Personuppgifter
+      "Helt_Namn_sökande": ["FORNAMN", "EFTERNAMN"],
+      "Persunnummer": "PERSONNUMMER",
+      "Adress": "ADRESS",
+      "Postnummer": "POSTNUMMER",
+      "Ort": "ORT",
+      
+      // Bostad
+      "Antal_rum": "BOSTAD_ANTAL_RUM",
+      "Antal_boende": "BOSTAD_ANTAL_BOENDE",
+      "Hyra": "HYRA",
+      
+      // God man
+      "Godman_HeltNamn": "GODMAN_NAMN",
+      
+      // Kostnader/Utgifter
+      "Ansokan_Kostnad_Hyra": "HYRA",
+      "Ansokan_Kostnad_Bredband": "INTERNET_BREDBAND",
+      "Ansokan_Kostnad_Fackavgift": "FACKAVGIFT",
+      "Ansokan_Kostnad_Hemforsakring": "HEMFORSAKRING",
+      "Ansokan_Kostnad_Arbetsresor": "ARBETSKOSTNADER_RESOR",
+      "Ansokan_Kostnad_Hushallsel": "HUSHALLSEL",
+      "Ansokan_Kostnad_MedicinRecept": "MEDICIN_RECEPT",
+      "Ansokan_Kostnad_Lakarvard": "LAKARVARD",
+      "Ansokan_Kostnad_Barnomsorg": "BARNOMSORG",
+      "Ansokan_Kostnad_Fardtjanst": "FARDTJANST",
+      
+      // Signatur
+      "Datum_underskrift": "__TODAY__"
+    }
+  },
+  
+  "ansokan-stockholm": {
+    name: "Ansökan om Försörjningsstöd (Stockholm)",
+    file: "Ansokan_Stockholm.pdf",
+    fields: {
+      // Ansökan-metadata
+      "Ansokan_Stockholm": "__FORM_TYPE__",
+      "Ansokan_Datum": "__TODAY__",
+      "Ansokan_Handlaggare": "HANDLAGGARE",
+      "Ansokan_AvserManad": "__MONTH__",
+      
+      // Personuppgifter - Sökande
+      "Sokande_Namn": ["FORNAMN", "EFTERNAMN"],
+      "Sokande_Personnummer": "PERSONNUMMER",
+      "Sokande_Medborgarskap": "MEDBORGARSKAP",
+      
+      // Personuppgifter - Medsökande
+      "Medsokande_Fornamn": "MEDSOKANDE_FORNAMN",
+      "Medsokande_Personnummer": "MEDSOKANDE_PERSONNUMMER",
+      "Medsokande_Efternamn": "MEDSOKANDE_EFTERNAMN",
+      "Medsokande_Medborgarskap": "MEDSOKANDE_MEDBORGARSKAP",
+      
+      // God man
+      "God_man_Namn": "GODMAN_NAMN",
+      
+      // Bostad
+      "Bostad_Adress": "ADRESS",
+      "Bostad_Postnummer": "POSTNUMMER",
+      "Bostad_Ort": "ORT",
+      "Bostad_AntalRum": "BOSTAD_ANTAL_RUM",
+      "Bostad_AntalBoende": "BOSTAD_ANTAL_BOENDE",
+      "Bostad_Typ_AnnanText": "BOSTAD_TYP",
+      "Bostad_Hyresvard": "BOSTAD_HYRESVARD",
+      "Bostad_TelefonSokande": "TELEFON_SOKANDE",
+      
+      // Sysselsättning
+      "Sysselsattning_Sokande": "SYSSELSATTNING",
+      "Sysselsattning_Medsokande": "MEDSOKANDE_SYSSELSATTNING",
+      
+      // Kostnader/Utgifter
+      "Ansokan_Kostnad_Fackavgift": "FACKAVGIFT",
+      "Ansokan_Kostnad_Hemforsakring": "HEMFORSAKRING",
+      "Ansokan_Kostnad_Hyra": "HYRA",
+      "Ansokan_Kostnad_Arbetsresor": "ARBETSKOSTNADER_RESOR",
+      "Ansokan_Kostnad_Hushallsel": "HUSHALLSEL",
+      "Ansokan_Kostnad_MedicinRecept": "MEDICIN_RECEPT",
+      "Ansokan_Kostnad_Lakarvard": "LAKARVARD",
+      "Ansokan_Kostnad_Barnomsorg": "BARNOMSORG",
+      "Ansokan_Kostnad_Fardtjanst": "FARDTJANST",
+      "Ansokan_Kostnad_AnnatText": "OVRIG_KOSTNAD_BESKRIVNING",
+      "Ansokan_Kostnad_AnnatBelopp": "OVRIG_KOSTNAD_BELOPP",
+      "Ansokan_Kostnad_Bredband": "INTERNET_BREDBAND",
+      
+      // Inkomster - Sökande
+      "Inkomst_Arbetslon_Sokande": "LON",
+      "Inkomst_Arbetslon_Datum_Sokande": "LON_DATUM",
+      "Inkomst_Barn_Sokande": "BARNBIDRAG_STUDIEBIDRAG",
+      "Inkomst_Barn_Datum_Sokande": "BARNBIDRAG_DATUM",
+      "Inkomst_HyraInneboende_Sokande": "HYRESINTAKT_INNEBOENDE",
+      "Inkomst_HyraInneboende_Datum_Sokande": "HYRESINTAKT_DATUM",
+      "Inkomst_PrivPensionUnderhall_Sokande": "PENSION_LIVRANTA_SJUK_AKTIVITET",
+      "Inkomst_PrivPensionUnderhall_Datum_Sokande": "PENSION_DATUM",
+      "Inkomst_OvrigDatum_Sokande": "OVRIG_INKOMST_DATUM",
+      "Inkomst_OvrigBelopp_Sokande": "OVRIG_INKOMST_BELOPP",
+      
+      // Inkomster - Medsökande
+      "Inkomst_Arbetslon_Medsokande": "MEDSOKANDE_LON",
+      "Inkomst_Barn_Medsokande": "MEDSOKANDE_BARNBIDRAG",
+      "Inkomst_HyraInneboende_Medsokande": "MEDSOKANDE_HYRESINTAKT",
+      "Inkomst_PrivPensionUnderhall_Medsokande": "MEDSOKANDE_PENSION",
+      "Inkomst_OvrigBelopp_Medsokande": "MEDSOKANDE_OVRIG_INKOMST_BELOPP",
+      
+      // Övrigt
+      "Ansokan_OvrigInfoHandlaggare": "ARSR_OVRIGA_UPPLYSNINGAR"
+    }
+  },
+  
+  // ========= AUTOGIRO OCH ANDRA FORMULÄR =========
+  
+  "autogiro-walley-apoteket": {
+    name: "Walley / Apoteket – Autogiro (Medgivande till betalning)",
+    file: "Walley_Apoteket_Autogiro.pdf",
+    fields: {
+      // Personuppgifter - Betalare
+      "Betalaren_Fornamn": "FORNAMN",
+      "Betalaren_Efternamn": "EFTERNAMN",
+      "Betalaren_Personnummer": "PERSONNUMMER",
+      "Betalaren_Epost": "EPOST",
+      
+      // Bankinformation
+      "Clearingnummer": "CLEARING_SOKANDE",
+      "Kontonummer": "KONTO_SOKANDE",
+      "Rakningskonto_Bank": "BANK_NAMN",
+      
+      // God man / Underskrift
+      "GodmanOrdatum": "__TODAY__",
+      "Godman_Heltnamn": "GODMAN_NAMN",
+      "GodmanTelefonnummer": "GODMAN_TELEFON",
+      "Godman_epost": "GODMAN_EPOST",
+      
+      // Betalningsval (kryssrutor)
+      "Betalas_i_sin_helhet": "BETALNING_HELHET",
+      "Delbetalas_vid_forfallodag": "BETALNING_DELVIS"
+    }
+  },
+  
+  "autogiro-svea-bank": {
+    name: "Svea Bank / Apotekstjänst – Autogiroanmälan",
+    file: "Svea_Bank_Autogiro.pdf",
+    fields: {
+      // Betalare
+      "Betalaren_Fornamn": "FORNAMN",
+      "Betalaren_Efternamn": "EFTERNAMN",
+      "Betalaren_Personnummer": "PERSONNUMMER",
+      "Betalaren_Adress": "ADRESS",
+      "Betalaren_Postadress": "POSTADRESS",
+      
+      // Bankinformation
+      "Clearingnummer": "CLEARING_SOKANDE",
+      "Kontonummer": "KONTO_SOKANDE",
+      "Rakningskonto_Bank": "BANK_NAMN",
+      "Kundnummer_Svea": "KUNDNUMMER_SVEA",
+      
+      // God man
+      "Godman_Ort_datum": "__TODAY__",
+      "Godman_Helt_namn": "GODMAN_NAMN",
+      "Godman_adress": "GODMAN_ADRESS",
+      "Godman_postadress": "GODMAN_POSTADRESS"
+    }
+  },
+  
+  "autogiro-fardtjanst": {
+    name: "Färdtjänst – Autogiro (Region Stockholm / Trafikförvaltningen)",
+    file: "Fardtjanst_Autogiro.pdf",
+    fields: {
+      // Betalare
+      "Betalaren_Fornamn": "FORNAMN",
+      "Betalaren_Efternamn": "EFTERNAMN",
+      "Betalaren_Personnummer": "PERSONNUMMER",
+      
+      // Bankinformation
+      "Clearingnummer": "CLEARING_SOKANDE",
+      "Kontonummer": "KONTO_SOKANDE",
+      
+      // God man / Underskrift
+      "Datum": "__TODAY__",
+      "Godman_Heltnamn": "GODMAN_NAMN"
+    }
+  },
+  
+  "autogiro-bg": {
+    name: "BG Autogiro – Medgivande till kontonummer (Bankgirocentralen BGC AB)",
+    file: "BG_Autogiro.pdf",
+    fields: {
+      // Betalningsmottagare (förtryckt, normalt inte editerbar)
+      "Betalningsmottagare_Namn": "MOTTAGARE_NAMN",
+      "Betalningsmottagare_Adress1": "MOTTAGARE_ADRESS",
+      "Betalningsmottagare_Adress2": "MOTTAGARE_ADRESS2",
+      "Betalningsmottagare_Adress3": "MOTTAGARE_STAD",
+      "Betalningsmottagare_Organisationsnummer": "MOTTAGARE_ORG_NUMMER",
+      "Bankgironummer": "BANKGIRO_NUMMER",
+      
+      // Betalare
+      "Betalare_Namn": ["FORNAMN", "EFTERNAMN"],
+      "Betalare_Adress1": "ADRESS",
+      "Betalare_Adress2": "POSTADRESS",
+      "Betalare_Adress3": "POSTORT",
+      "Betalare_Personnummer": "PERSONNUMMER",
+      "Betalare_Bank": "BANK_NAMN",
+      "Betalare_Clearingnummer": "CLEARING_SOKANDE",
+      "Betalare_Kontonummer": "KONTO_SOKANDE",
+      "Betalare_Kundnummer": "KUNDNUMMER_BG",
+      
+      // Underskrift
+      "Underskrift_Ort_Datum": "__TODAY__"
+    }
+  },
+  
+  "flyttanmalan-skatteverket": {
+    name: "Flyttanmälan – Skatteverket (Flyttning inom Sverige)",
+    file: "Flyttanmalan_Skatteverket.pdf",
+    fields: {
+      // Personer som flyttar (rad 1-5)
+      "Person1_Personnummer": "PERSONNUMMER",
+      "Person1_Namn": ["FORNAMN", "EFTERNAMN"],
+      "Person2_Personnummer": "MEDSOKANDE_PERSONNUMMER",
+      "Person2_Namn": ["MEDSOKANDE_FORNAMN", "MEDSOKANDE_EFTERNAMN"],
+      
+      // Ny bostadsadress
+      "Ny_Adress_Gata": "ADRESS",
+      "Ny_Adress_Lagenhetnummer": "LAGENHETNUMMER",
+      "Ny_Adress_Postnummer": "POSTNUMMER",
+      "Ny_Adress_Postort": "ORT",
+      
+      // Hyresvård/Fastighetsägare
+      "Fastighetsbeteckning": "FASTIGHETSBETECKNING",
+      
+      // Datum
+      "Inflyttningsdatum": "__TODAY__",
+      "Tillsvidare": "TILLSVIDARE",
+      
+      // Underskrifter (God man)
+      "Godman_Namn": "GODMAN_NAMN",
+      "Godman_Telefon": "GODMAN_TELEFON",
+      "Godman_Mail": "GODMAN_EPOST",
+      "Datum_Underskrift": "__TODAY__"
+    }
+  },
+  
+  "fortekning-tillgangar-skulder": {
+    name: "Förteckning över tillgångar och skulder (14 kap 1 § FB)",
+    file: "Fortekning_Tillgangar_Skulder.pdf",
+    fields: {
+      // Huvudman
+      "Huvudman_HeltNamn": ["FORNAMN", "EFTERNAMN"],
+      "Huvudman_Pnr": "PERSONNUMMER",
+      "Forordnande_Datum": "FORORDNANDE_DATUM",
+      "Huvudman_Adress": "ADRESS",
+      "Huvudman_Postnummer": "POSTNUMMER",
+      "Huvudman_Postort": "ORT",
+      "Huvudman_Mobilnummer": "TELEFON_SOKANDE",
+      "Huvudman_Epostadress": "EPOST",
+      
+      // Ställföreträdare (God man / Förvaltare)
+      "Godman_HeltNamn": "GODMAN_NAMN",
+      "Godman_Pnr": "GODMAN_PERSONNUMMER",
+      "Godman_Adress": "GODMAN_ADRESS",
+      "Godman_Postnr": "GODMAN_POSTNUMMER",
+      "Godman_Postort": "GODMAN_ORT",
+      "Godman_Telefon": "GODMAN_TELEFON",
+      "Godman_Epost": "GODMAN_EPOST",
+      
+      // Tillgångar per förordnandedagen (dessa är manuella felter i PDF, mappas för referens)
+      "TillgStart_Bankkonto_Beskrivning": "BANK_BESKRIVNING",
+      "TillgStart_Bankkonto_Belopp": "BANK_BELOPP",
+      "TillgStart_Ovrigt_Beskrivning": "TILLG_OVRIGT_BESKRIVNING",
+      "TillgStart_Ovrigt_Belopp": "TILLG_OVRIGT_BELOPP",
+      
+      // Skulder per förordnandedagen
+      "Skuld_Langivare": "SKULD_LANGIVARE",
+      "Skuld_Belopp": "SKULD_BELOPP",
+      
+      // ÖFN:s anteckningar
+      "Ofn_Anteckningar": "OFN_ANTECKNINGAR",
+      
+      // Underskrift
+      "Undertecknad_OrtDatum": "__TODAY__",
+      "Undertecknad_Namn": ["FORNAMN", "EFTERNAMN"]
+    }
+  }
+};
+
+/**
+ * Hämta konfiguration för en viss PDF-mall
+ * @param {string} templateKey - template-id-name, t.ex. "forsorjningsstod-uppsala"
+ * @returns {object|null} Configuration object eller null om ej funnen
+ */
+function getPdfTemplateConfig(templateKey) {
+  return PDF_TEMPLATES_CONFIG[templateKey] || null;
+}
+
+/**
+ * Bygg PDF-fältvärden från huvudman-data med en specifik template-config
+ * @param {object} hovedmannData - Hela huvudman-objektet från DB
+ * @param {object} templateConfig - Config från PDF_TEMPLATES_CONFIG
+ * @returns {object} Mappade PDF-fältvärden
+ */
+function buildPdfFieldValuesFromConfig(hovedmannData, templateConfig, context = {}) {
+  if (!templateConfig || !templateConfig.fields) return {};
+
+  const hm = hovedmannData || {};
+  const todayValue = context.today || new Date().toLocaleDateString("sv-SE");
+  const monthValue = context.monthName || new Date().toLocaleString("sv-SE", { month: "long" });
+  const yearValue = context.year || String(new Date().getFullYear());
+  const formTypeValue = context.formType || templateConfig?.file?.replace(/\.pdf$/i, "") || templateConfig?.name || "";
+
+  const isLikelyNumeric = fieldName => {
+    const lower = fieldName.toLowerCase();
+    if (lower.endsWith("text")) return false;
+    const numericHints = [
+      "kostnad",
+      "belopp",
+      "avgift",
+      "inkomst",
+      "hyra",
+      "ersattning",
+      "bidrag",
+      "summa",
+      "lon",
+      "pension",
+      "bredband",
+      "fardtjanst",
+      "tandvard",
+      "lakar",
+      "medicin"
+    ];
+    return numericHints.some(hint => lower.includes(hint));
+  };
+
+  const isNumericLike = value => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "number") return true;
+    const normalized = String(value).trim().replace(/\s/g, "").replace(",", ".");
+    if (normalized === "") return false;
+    return !Number.isNaN(Number(normalized));
+  };
+
+  const result = {};
+
+  Object.entries(templateConfig.fields).forEach(([pdfFieldName, dbKey]) => {
+    let value = "";
+
+    if (dbKey === "__TODAY__") {
+      value = todayValue;
+    } else if (dbKey === "__MONTH__") {
+      value = monthValue;
+    } else if (dbKey === "__YEAR__") {
+      value = yearValue;
+    } else if (dbKey === "__FORM_TYPE__") {
+      value = formTypeValue;
+    } else if (Array.isArray(dbKey)) {
+      const parts = dbKey.map(key => getCaseInsensitive(hm, key) || "").filter(v => v);
+      value = parts.join(" ").trim();
+    } else {
+      value = getCaseInsensitive(hm, dbKey) ?? "";
+    }
+
+    if (isLikelyNumeric(pdfFieldName) && isNumericLike(value)) {
+      value = formatBeloppForPdf(value);
+    }
+
+    if (value === null || value === undefined) {
+      result[pdfFieldName] = "";
+    } else {
+      result[pdfFieldName] = typeof value === "string" ? value : String(value);
+    }
+  });
+
+  return result;
+}
 
 // --- API endpoints (matchar dina faktiska PHP-filer) ---
 const API = {
@@ -273,7 +906,7 @@ async function generateAndDownloadPdf() {
   const extraFields = {
     manad: new Date().toLocaleString("sv-SE", { month: "long" }),
     datum: new Date().toLocaleDateString("sv-SE"),
-    kommunHandlaggare: currentFsKommunNamn || "",
+    kommunHandlaggare: window.currentFsKommunNamn || "",
     gm: activeGodManProfile?.heltNamn || "",
     heltNamn:
       currentHuvudmanFullData.huvudmanDetails.HeltNamn ||
@@ -1877,36 +2510,56 @@ function populateHuvudmanDetailsForm(data) {
     isSelectInt = false
   ) => {
     const el = document.getElementById(id);
-    if (el) {
-      if (isRadioName && value !== null && value !== undefined) {
-        const radioToSelect = document.querySelector(`input[name="${isRadioName}"][value="${String(value)}"]`);
-        if (radioToSelect) radioToSelect.checked = true;
-        else {
-          document.querySelectorAll(`input[name="${isRadioName}"]`).forEach(r => (r.checked = false));
-        }
-      } else if (isCheckbox) {
-        el.checked = value === 1 || value === true || String(value) === "1";
-      } else if (isSelectInt) {
-        el.value = value !== null && value !== undefined && String(value).trim() !== "" ? String(parseInt(value)) : "";
-      } else if (el.tagName === "SELECT" && !isSelectInt) {
-        el.value = value !== null && value !== undefined ? String(value) : "";
-      } else if (isNumeric) {
-        if (value !== null && value !== undefined && String(value).trim() !== "") {
-          const numericString = String(value).replace(",", ".");
-          if (isFloat) {
-            const numericValue = parseFloat(numericString);
-            // FIX: Konverterar till svenskt format med komma för decimaler.
-            el.value = !isNaN(numericValue) ? numericValue.toFixed(2).replace(".", ",") : "";
-          } else {
-            const intValue = parseInt(numericString);
-            el.value = !isNaN(intValue) ? String(intValue) : "";
-          }
-        } else {
-          el.value = "";
-        }
-      } else {
-        el.value = value !== null && value !== undefined ? String(value) : "";
+    if (!el) return;
+
+    if (isRadioName && value !== null && value !== undefined) {
+      const radioToSelect = document.querySelector(`input[name="${isRadioName}"][value="${String(value)}"]`);
+      if (radioToSelect) radioToSelect.checked = true;
+      else {
+        document.querySelectorAll(`input[name="${isRadioName}"]`).forEach(r => (r.checked = false));
       }
+      return;
+    }
+
+    if (isCheckbox) {
+      el.checked = value === 1 || value === true || String(value) === "1";
+      return;
+    }
+
+    if (isSelectInt) {
+      el.value = value !== null && value !== undefined && String(value).trim() !== "" ? String(parseInt(value)) : "";
+    } else if (el.tagName === "SELECT" && !isSelectInt) {
+      el.value = value !== null && value !== undefined ? String(value) : "";
+    } else if (el.type === "number" && isNumeric) {
+      // För type="number" fält: konvertera komma till punkt
+      let numStr = String(value ?? "").trim();
+      if (numStr === "") {
+        el.value = "";
+      } else {
+        numStr = numStr.replace(",", ".");
+        const num = isFloat ? parseFloat(numStr) : parseInt(numStr, 10);
+        el.value = isNaN(num) ? "" : (isFloat ? num.toFixed(2) : String(num));
+        console.log(`[setVal LOCAL] Setting ${id} (type=number) to: ${el.value}`);
+      }
+    } else if (isNumeric) {
+      // För vanliga text-fält med numeriska värden: använd punkt-format
+      let numStr = String(value ?? "").trim();
+      if (numStr === "") {
+        el.value = "";
+      } else {
+        numStr = numStr.replace(",", ".");
+        const num = isFloat ? parseFloat(numStr) : parseInt(numStr, 10);
+        el.value = isNaN(num) ? "" : (isFloat ? num.toFixed(2) : String(num));
+        console.log(`[setVal LOCAL] Setting ${id} to PUNKT format: ${el.value}`);
+      }
+    } else {
+      el.value = value ?? "";
+    }
+
+    // VIKTIGT: Alltid trigga events för Spegla-synkronisering
+    if (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA") {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
     }
   };
 
@@ -1959,16 +2612,16 @@ function populateHuvudmanDetailsForm(data) {
   setVal("kontonummer", getCI(hm, "Kontonummer"));
 
   // --- Boende, Sysselsättning & Ekonomi (Generellt) ---
-  setVal("boendeNamn", getCI(hm, "BoendeNamn"));
-  setVal("bostadTyp", getCI(hm, "BostadTyp"));
-  setVal("bostadAntalRum", getCI(hm, "BostadAntalRum"), false, null, true, false);
-  setVal("bostadAntalBoende", getCI(hm, "BostadAntalBoende"), false, null, true, false);
-  setVal("bostadKontraktstid", getCI(hm, "BostadKontraktstid"));
-  setVal("sysselsattning", getCI(hm, "Sysselsattning"));
-  setVal("inkomsttyp", getCI(hm, "Inkomsttyp"));
-  setVal("deklareratStatus", getCI(hm, "DeklareratStatus"));
-  setVal("arvodeUtbetaltStatus", getCI(hm, "ArvodeUtbetaltStatus"), false, null, false, false, true);
-  setVal("merkostnadsersattningStatus", getCI(hm, "MerkostnadsersattningStatus"), false, null, false, false, true);
+  setVal("boendeNamn", getCI(hm, "BOENDE_NAMN"));
+  setVal("bostadTyp", getCI(hm, "BOSTAD_TYP"));
+  setVal("bostadAntalRum", getCI(hm, "BOSTAD_ANTAL_RUM"), false, null, true, false);
+  setVal("bostadAntalBoende", getCI(hm, "BOSTAD_ANTAL_BOENDE"), false, null, true, false);
+  setVal("bostadKontraktstid", getCI(hm, "BOSTAD_KONTRAKTSTID"));
+  setVal("sysselsattning", getCI(hm, "SYSSELSATTNING"));
+  setVal("inkomsttyp", getCI(hm, "INKOMSTTYP"));
+  setVal("deklareratStatus", getCI(hm, "DEKLARERAT_STATUS"));
+  setVal("arvodeUtbetaltStatus", getCI(hm, "ARVODE_UTBETALT_STATUS"), false, null, false, false, true);
+  setVal("merkostnadsersattningStatus", getCI(hm, "MERKOSTNADSERSTATTNING_STATUS"), false, null, false, false, true);
 
   // --- Övriga Kontakter & Statusar ---
   setVal(
@@ -1985,46 +2638,71 @@ function populateHuvudmanDetailsForm(data) {
   setVal("arsrOvrigaUpplysningar", getCI(hm, "ArsrOvrigaUpplysningar"));
 
   // --- Generella Kostnader & Inkomster (Månadsvis) etc. ---
-  const numericFields = [
-    "hyra",
-    "elKostnad",
-    "hemforsakring",
-    "reskostnader",
-    "fackAvgiftAkassa",
-    "medicinKostnad",
-    "lakarvardskostnad",
-    "akutTandvardskostnad",
-    "barnomsorgAvgift",
-    "fardtjanstAvgift",
-    "bredband",
-    "ovrigKostnadBelopp",
-    "lon",
-    "pensionLivrantaSjukAktivitet",
-    "sjukpenningForaldrapenning",
-    "arbetsloshetsersattning",
-    "bostadsbidrag",
-    "barnbidragStudiebidrag",
-    "underhallsstodEfterlevandepension",
-    "etableringsersattning",
-    "avtalsforsakringAfa",
-    "hyresintaktInneboende",
-    "barnsInkomst",
-    "skatteaterbaring",
-    "studiemedel",
-    "vantadInkomstBelopp",
-    "ovrigInkomstBelopp",
-    "tillgangBankmedelVarde",
-    "tillgangBostadsrattFastighetVarde",
-    "tillgangFordonMmVarde",
-    "skuldKfmVarde",
-  ];
-  numericFields.forEach(fieldId => setVal(fieldId, getCI(hm, fieldId), false, null, true, true));
+  // EXPLICIT MAPPING: HTML field IDs (camelCase) → Database columns (UPPERCASE)
+  const costIncomeMapping = {
+    // Kostnader
+    "hyra": "HYRA",
+    "elKostnad": "EL_KOSTNAD",
+    "hemforsakring": "HEMFORSAKRING",
+    "reskostnader": "RESKOSTNADER",
+    "fackAvgiftAkassa": "FACK_AVGIFT_AKASSA",
+    "medicinKostnad": "MEDICIN_KOSTNAD",
+    "lakarvardskostnad": "LAKARVARDSKOSTNAD",
+    "akutTandvardskostnad": "AKUT_TANDVARDSKOSTNAD",
+    "barnomsorgAvgift": "BARNOMSORG_AVGIFT",
+    "fardtjanstAvgift": "FARDTJANST_AVGIFT",
+    "bredband": "BREDBAND",
+    "ovrigKostnadBelopp": "OVRIG_KOSTNAD_BELOPP",
+    // Inkomster
+    "lon": "LON",
+    "pensionLivrantaSjukAktivitet": "PENSION_LIVRANTA_SJUK_AKTIVITET",
+    "sjukpenningForaldrapenning": "SJUKPENNING_FORALDRAPENNING",
+    "arbetsloshetsersattning": "ARBETSLOSHETSERSTATTNING",
+    "bostadsbidrag": "BOSTADSBIDRAG",
+    "barnbidrag": "BARNBIDRAG_STUDIEBIDRAG",
+    "underhallsstod": "UNDERHALLSSTOD_EFTERLEVANDEPENSION",
+    "etableringsersattning": "ETABLERINGSERSATTNING",
+    "avtalsforsakringAfa": "AVTALSFORSAKRING_AFA",
+    "hyresintaktInneboende": "HYRESINTAKT_INNEBOENDE",
+    "barnsInkomst": "BARNS_INKOMST",
+    "skatteaterbaring": "SKATTEATERBARING",
+    "studiemedel": "STUDIEMEDEL",
+    "vantadInkomstBelopp": "VANTAD_INKOMST_BELOPP",
+    "ovrigInkomstBelopp": "OVRIG_INKOMST_BELOPP",
+    // Tillgångar & Skulder
+    "tillgangBankmedelVarde": "TILLGANG_BANKMEDEL_VARDE",
+    "tillgangBostadsrattFastighetVarde": "TILLGANG_BOSTADSRATT_FASTIGHET_VARDE",
+    "tillgangFordonMmVarde": "TILLGANG_FORDON_MM_VARDE",
+    "skuldKfmVarde": "SKULD_KFM_VARDE",
+  };
+
+  // Läs alla kostnader/inkomster-fält med explicit mapping
+  console.log("[PopulateForm] ========== KOSTNADER/INKOMSTER MAPPING START ==========");
+  console.log("[PopulateForm] Hela hm-objektet:", JSON.stringify(hm, null, 2).substring(0, 1000));
+  
+  Object.keys(costIncomeMapping).forEach(fieldId => {
+    const dbColumnName = costIncomeMapping[fieldId];
+    const value = getCI(hm, dbColumnName);
+    console.log(`[PopulateForm] ${fieldId} (DB: ${dbColumnName}): ${value === null ? 'NULL' : value}`);
+    setVal(fieldId, value, false, null, true, true);
+  });
+  console.log("[PopulateForm] ========== KOSTNADER/INKOMSTER MAPPING END ==========");
 
   // Text fields that are not numeric
-  setVal("ovrigKostnadBeskrivning", getCI(hm, "OvrigKostnadBeskrivning"));
-  setVal("vantadInkomstBeskrivning", getCI(hm, "VantadInkomstBeskrivning"));
-  setVal("ovrigInkomstBeskrivning", getCI(hm, "OvrigInkomstBeskrivning"));
-  setVal("handlaggare", getCI(hm, "Handlaggare"));
+  setVal("ovrigKostnadBeskrivning", getCI(hm, "OVRIG_KOSTNAD_BESKRIVNING"));
+  setVal("vantadInkomstBeskrivning", getCI(hm, "VANTAD_INKOMST_BESKRIVNING"));
+  setVal("ovrigInkomstBeskrivning", getCI(hm, "OVRIG_INKOMST_BESKRIVNING"));
+  setVal("handlaggare", getCI(hm, "HANDLAGGARE"));
+
+  // Nya fält (lägg till dessa innan dynamiska listor)
+  setVal("ovrigInkomstBelopp", hm.ovrigInkomstBelopp);
+  setVal("tillgangBankmedelVarde", hm.tillgangBankmedelVarde);
+  setVal("tillgangBostadsrattFastighetVarde", hm.tillgangBostadsrattFastighetVarde);
+  setVal("tillgangFordonMmVarde", hm.tillgangFordonMmVarde);
+  setVal("skuldKfmVarde", hm.skuldKfmVarde);
+
+  // Medsökande
+  setVal("medsokandeFornamn", hm.medsokandeFornamn);
 
   // --- Fyll i dynamiska listor ---
   renderDynamicList("hmBankkontonStartContainer", data.bankkontonStart || [], "BankkontoStart", createBankkontoRow);
@@ -2054,6 +2732,99 @@ function populateHuvudmanDetailsForm(data) {
   allCollapsibleContents.forEach(content => content.classList.add("hidden-content"));
 
   console.log("[PopulateForm] Avslutar ifyllnad.");
+
+  // NYTT: Initiera Spegla-synkronisering efter att alla fält är populerade
+  initializeSpeglaSync();
+}
+
+/**
+ * NYTT: Initialiserar Spegla-synkronisering mellan Generella kostnader och Månadsbudget.
+ * Kallas från populateHuvudmanDetailsForm() efter att alla fält är renderade.
+ */
+function initializeSpeglaSync() {
+  // Mapping mellan HTML-ID:n i Generella kostnader och Månadsbudget
+  const fieldMappings = [
+    // Kostnader
+    { generalId: "hyra", monthlyId: "ov-HYRA" },
+    { generalId: "elKostnad", monthlyId: "ov-EL_KOSTNAD" },
+    { generalId: "hemforsakring", monthlyId: "ov-HEMFORSAKRING" },
+    { generalId: "reskostnader", monthlyId: "ov-RESKOSTNADER" },
+    { generalId: "fackAvgiftAkassa", monthlyId: "ov-FACK_AVGIFT_AKASSA" },
+    { generalId: "medicinKostnad", monthlyId: "ov-MEDICIN_KOSTNAD" },
+    { generalId: "lakarvardskostnad", monthlyId: "ov-LAKARVARDSKOSTNAD" },
+    { generalId: "barnomsorgAvgift", monthlyId: "ov-BARNOMSORG_AVGIFT" },
+    { generalId: "fardtjanstAvgift", monthlyId: "ov-FARDTJANST_AVGIFT" },
+    { generalId: "akutTandvardskostnad", monthlyId: "ov-AKUT_TANDVARDSKOSTNAD" },
+    { generalId: "bredband", monthlyId: "ov-BREDBAND" },
+    { generalId: "ovrigKostnadBeskrivning", monthlyId: "ov-OVRIG_KOSTNAD_BESKRIVNING" },
+    { generalId: "ovrigKostnadBelopp", monthlyId: "ov-OVRIG_KOSTNAD_BELOPP" },
+    
+    // Inkomster
+    { generalId: "lon", monthlyId: "ov-LON" },
+    { generalId: "pensionLivrantaSjukAktivitet", monthlyId: "ov-PENSION_LIVRANTA_SJUK_AKTIVITET" },
+    { generalId: "sjukpenningForaldrapenning", monthlyId: "ov-SJUKPENNING_FORALDRAPENNING" },
+    { generalId: "arbetsloshetsersattning", monthlyId: "ov-ARBETSLOSHETSERSTATTNING" },
+    { generalId: "bostadsbidrag", monthlyId: "ov-BOSTADSBIDRAG" },
+    { generalId: "barnbidrag", monthlyId: "ov-BARNBIDRAG_STUDIEBIDRAG" },
+    { generalId: "skatteaterbaring", monthlyId: "ov-SKATTEATERBARING" },
+    { generalId: "studiemedel", monthlyId: "ov-STUDIEMEDEL" },
+    { generalId: "underhallsstod", monthlyId: "ov-UNDERHALLSSTOD_EFTERLEVANDEPENSION" },
+    { generalId: "avtalsforsakringAfa", monthlyId: "ov-AVTALSFORSAKRING_AFA" },
+    { generalId: "hyresintaktInneboende", monthlyId: "ov-HYRESINTAKT_INNEBOENDE" },
+    { generalId: "barnsInkomst", monthlyId: "ov-BARNS_INKOMST" },
+    { generalId: "etableringsersattning", monthlyId: "ov-ETABLERINGSERSATTNING" },
+    { generalId: "vantadInkomstBeskrivning", monthlyId: "ov-VANTAD_INKOMST_BESKRIVNING" },
+    { generalId: "vantadInkomstBelopp", monthlyId: "ov-VANTAD_INKOMST_BELOPP" },
+    { generalId: "ovrigInkomstBeskrivning", monthlyId: "ov-OVRIG_INKOMST_BESKRIVNING" },
+    { generalId: "ovrigInkomstBelopp", monthlyId: "ov-OVRIG_INKOMST_BELOPP" },
+  ];
+
+  fieldMappings.forEach(({ generalId, monthlyId }) => {
+    const generalField = document.getElementById(generalId);
+    const monthlyField = document.getElementById(monthlyId);
+
+    if (!generalField || !monthlyField) {
+      console.log(`[Spegla] Fältet ${generalId} eller ${monthlyId} hittades inte`);
+      return;
+    }
+
+    console.log(`[Spegla] ✓ Konfigurerat ${generalId} → ${monthlyId}`);
+
+    // Funktion för att synka värde
+    const syncValue = () => {
+      // Läs värdet från generella fältet (använd .value, inte getAttribute)
+      let syncedValue = generalField.value;
+      
+      // Om månadsfältet är type="number", konvertera komma till punkt
+      if (monthlyField.type === "number" && syncedValue) {
+        syncedValue = String(syncedValue).replace(",", ".");
+      }
+      
+      // Sätt på månadsfältet (använd bara .value)
+      monthlyField.value = syncedValue;
+      console.log(`[Spegla] ${generalId} → ${monthlyId}: ${syncedValue} (sync, type=${monthlyField.type})`);
+    };
+
+    // Live-spegel: skriv i Generella kostnader → uppdatera Månadsbudget direkt
+    generalField.addEventListener("input", syncValue);
+    
+    // Också lyssna på "change" event för fullständighet
+    generalField.addEventListener("change", syncValue);
+    
+    // MutationObserver för att fånga programmatiska ändringar
+    const observer = new MutationObserver(() => {
+      syncValue();
+    });
+    observer.observe(generalField, { attributes: true, attributeFilter: ["value"] });
+
+    // Vid sidladdning: synka initialt (Generella → Månadsbudget)
+    // Liten fördröjning för att säkerställa att DOM är helt uppdaterad
+    setTimeout(() => {
+      syncValue();
+    }, 50);
+  });
+
+  console.log("[Spegla] Alla kostnader & inkomster är nu speglade mellan Generella kostnader och Månadsbudget");
 }
 
 /**
@@ -2142,41 +2913,66 @@ function collectHuvudmanFullDetailsFromForm() {
   baseHmDetails.CLEARINGNUMMER = getVal("clearingnummer");
   baseHmDetails.KONTONUMMER = getVal("kontonummer");
 
-  // Generella Kostnader & Inkomster (VERSALER)
-  // HYRA: primärt från Generella kostnader (#hyra), sekundärt från dashboard (#ov-HYRA)
-  const hyraPrim = getVal("hyra", false, null, true, true);
-  const hyraAlt  = getVal("ov-HYRA", false, null, true, true);
-  baseHmDetails.HYRA = hyraPrim ?? hyraAlt ?? null;
+  // Boende, Sysselsättning & Ekonomi
+  baseHmDetails.BOENDE_NAMN = getVal("boendeNamn");
+  baseHmDetails.BOSTAD_TYP = getVal("bostadTyp");
+  baseHmDetails.BOSTAD_ANTAL_RUM = getVal("bostadAntalRum", false, null, true, false);
+  baseHmDetails.BOSTAD_ANTAL_BOENDE = getVal("bostadAntalBoende", false, null, true, false);
+  baseHmDetails.BOSTAD_KONTRAKTSTID = getVal("bostadKontraktstid");
+  baseHmDetails.SYSSELSATTNING = getVal("sysselsattning");
+  baseHmDetails.INKOMSTTYP = getVal("inkomsttyp");
+  baseHmDetails.DEKLARERAT_STATUS = getVal("deklareratStatus");
+  baseHmDetails.ARVODE_UTBETALT_STATUS = getVal("arvodeUtbetaltStatus", false, null, false, false, true);
+  baseHmDetails.MERKOSTNADSERSTATTNING_STATUS = getVal("merkostnadsersattningStatus", false, null, false, false, true);
 
-  baseHmDetails.EL_KOSTNAD = getVal("elKostnad", false, null, true, true);
-  baseHmDetails.FACK_AVGIFT_AKASSA = getVal("fackAvgiftAkassa", false, null, true, true);
-  baseHmDetails.RESKOSTNADER = getVal("reskostnader", false, null, true, true);
-  baseHmDetails.HEMFORSAKRING = getVal("hemforsakring", false, null, true, true);
-  baseHmDetails.MEDICIN_KOSTNAD = getVal("medicinKostnad", false, null, true, true);
-  baseHmDetails.LAKARVARDSKOSTNAD = getVal("lakarvardskostnad", false, null, true, true);
-  baseHmDetails.BARNOMSORG_AVGIFT = getVal("barnomsorgAvgift", false, null, true, true);
-  baseHmDetails.FARDTJANST_AVGIFT = getVal("fardtjanstAvgift", false, null, true, true);
-  baseHmDetails.AKUT_TANDVARDSKOSTNAD = getVal("akutTandvardskostnad", false, null, true, true);
-  baseHmDetails.BREDBAND = getVal("bredband", false, null, true, true);
-  baseHmDetails.OVRIG_KOSTNAD_BESKRIVNING = getVal("ovrigKostnadBeskrivning");
-  baseHmDetails.OVRIG_KOSTNAD_BELOPP = getVal("ovrigKostnadBelopp", false, null, true, true);
-  baseHmDetails.ARBETSLOSHETSERSTATTNING = getVal("arbetsloshetsersattning", false, null, true, true);
-  baseHmDetails.AVTALSFOrSAKRING_AFA = getVal("avtalsforsakringAfa", false, null, true, true);
-  baseHmDetails.BARNBIDRAG_STUDIEBIDRAG = getVal("barnbidragStudiebidrag", false, null, true, true);
-  baseHmDetails.BOSTADSBIDRAG = getVal("bostadsbidrag", false, null, true, true);
-  baseHmDetails.ETABLERINGSERSATTNING = getVal("etableringsersattning", false, null, true, true);
-  baseHmDetails.BARNS_INKOMST = getVal("barnsInkomst", false, null, true, true);
-  baseHmDetails.HYRESINTAKT_INNEBOENDE = getVal("hyresintaktInneboende", false, null, true, true);
-  baseHmDetails.LON = getVal("lon", false, null, true, true);
-  baseHmDetails.PENSION_LIVRANTA_SJUK_AKTIVITET = getVal("pensionLivrantaSjukAktivitet", false, null, true, true);
-  baseHmDetails.SJUKPENNING_FORALDRAPENNING = getVal("sjukpenningForaldrapenning", false, null, true, true);
-  baseHmDetails.SKATTEATERBARING = getVal("skatteaterbaring", false, null, true, true);
-  baseHmDetails.STUDIEMEDEL = getVal("studiemedel", false, null, true, true);
-  baseHmDetails.UNDERHALLSSTOD_EFTERLEVANDEPENSION = getVal("underhallsstodEfterlevandepension", false, null, true, true);
-  baseHmDetails.VANTAD_INKOMST_BESKRIVNING = getVal("vantadInkomstBeskrivning");
-  baseHmDetails.VANTAD_INKOMST_BELOPP = getVal("vantadInkomstBelopp", false, null, true, true);
-  baseHmDetails.OVRIG_INKOMST_BESKRIVNING = getVal("ovrigInkomstBeskrivning");
-  baseHmDetails.OVRIG_INKOMST_BELOPP = getVal("ovrigInkomstBelopp", false, null, true, true);
+  // =================================================================
+  // === GENERELLA KOSTNADER & INKOMSTER - MED FALLBACK FÖR ALLA ===
+  // =================================================================
+  // Hjälpfunktion för att läsa med fallback
+  const readWithFallback = (primaryId, fallbackId) => {
+    const primaryValue = getVal(primaryId, false, null, true, true);
+    const fallbackValue = getVal(fallbackId, false, null, true, true);
+    return primaryValue ?? fallbackValue ?? null;
+  };
+  
+  // Kostnader - alla med fallback till ov-* dashboard-fälten
+  baseHmDetails.HYRA = readWithFallback("hyra", "ov-HYRA");
+  baseHmDetails.EL_KOSTNAD = readWithFallback("elKostnad", "ov-EL_KOSTNAD");
+  baseHmDetails.FACK_AVGIFT_AKASSA = readWithFallback("fackAvgiftAkassa", "ov-FACK_AVGIFT_AKASSA");
+  baseHmDetails.RESKOSTNADER = readWithFallback("reskostnader", "ov-RESKOSTNADER");
+  baseHmDetails.HEMFORSAKRING = readWithFallback("hemforsakring", "ov-HEMFORSAKRING");
+  baseHmDetails.MEDICIN_KOSTNAD = readWithFallback("medicinKostnad", "ov-MEDICIN_KOSTNAD");
+  baseHmDetails.LAKARVARDSKOSTNAD = readWithFallback("lakarvardskostnad", "ov-LAKARVARDSKOSTNAD");
+  baseHmDetails.BARNOMSORG_AVGIFT = readWithFallback("barnomsorgAvgift", "ov-BARNOMSORG_AVGIFT");
+  baseHmDetails.FARDTJANST_AVGIFT = readWithFallback("fardtjanstAvgift", "ov-FARDTJANST_AVGIFT");
+  baseHmDetails.AKUT_TANDVARDSKOSTNAD = readWithFallback("akutTandvardskostnad", "ov-AKUT_TANDVARDSKOSTNAD");
+  baseHmDetails.BREDBAND = readWithFallback("bredband", "ov-BREDBAND");
+  baseHmDetails.OVRIG_KOSTNAD_BELOPP = readWithFallback("ovrigKostnadBelopp", "ov-OVRIG_KOSTNAD_BELOPP");
+  
+  // Övriga kostnader-texter (utan numerisk fallback)
+  baseHmDetails.OVRIG_KOSTNAD_BESKRIVNING = getVal("ovrigKostnadBeskrivning") ?? null;
+  
+  // Inkomster - alla med fallback till ov-* dashboard-fälten
+  baseHmDetails.LON = readWithFallback("lon", "ov-LON");
+  baseHmDetails.PENSION_LIVRANTA_SJUK_AKTIVITET = readWithFallback("pensionLivrantaSjukAktivitet", "ov-PENSION_LIVRANTA_SJUK_AKTIVITET");
+  baseHmDetails.SJUKPENNING_FORALDRAPENNING = readWithFallback("sjukpenningForaldrapenning", "ov-SJUKPENNING_FORALDRAPENNING");
+  baseHmDetails.ARBETSLOSHETSERSTATTNING = readWithFallback("arbetsloshetsersattning", "ov-ARBETSLOSHETSERSTATTNING");
+  baseHmDetails.BOSTADSBIDRAG = readWithFallback("bostadsbidrag", "ov-BOSTADSBIDRAG");
+  baseHmDetails.BARNBIDRAG_STUDIEBIDRAG = readWithFallback("barnbidrag", "ov-BARNBIDRAG_STUDIEBIDRAG");
+  baseHmDetails.UNDERHALLSSTOD_EFTERLEVANDEPENSION = readWithFallback("underhallsstod", "ov-UNDERHALLSSTOD_EFTERLEVANDEPENSION");
+  baseHmDetails.ETABLERINGSERSATTNING = readWithFallback("etableringsersattning", "ov-ETABLERINGSERSATTNING");
+  baseHmDetails.AVTALSFORSAKRING_AFA = readWithFallback("avtalsforsakringAfa", "ov-AVTALSFORSAKRING_AFA");
+  baseHmDetails.HYRESINTAKT_INNEBOENDE = readWithFallback("hyresintaktInneboende", "ov-HYRESINTAKT_INNEBOENDE");
+  baseHmDetails.BARNS_INKOMST = readWithFallback("barnsInkomst", "ov-BARNS_INKOMST");
+  baseHmDetails.SKATTEATERBARING = readWithFallback("skatteaterbaring", "ov-SKATTEATERBARING");
+  baseHmDetails.STUDIEMEDEL = readWithFallback("studiemedel", "ov-STUDIEMEDEL");
+  baseHmDetails.VANTAD_INKOMST_BELOPP = readWithFallback("vantadInkomstBelopp", "ov-VANTAD_INKOMST_BELOPP");
+  baseHmDetails.OVRIG_INKOMST_BELOPP = readWithFallback("ovrigInkomstBelopp", "ov-OVRIG_INKOMST_BELOPP");
+  
+  // Övriga inkomster-texter (utan numerisk fallback)
+  baseHmDetails.VANTAD_INKOMST_BESKRIVNING = getVal("vantadInkomstBeskrivning") ?? null;
+  baseHmDetails.OVRIG_INKOMST_BESKRIVNING = getVal("ovrigInkomstBeskrivning") ?? null;
+  // =================================================================
 
   // Generella Tillgångar & Skulder
   baseHmDetails.TILLGANG_BANKMEDEL_VARDE = getVal("tillgangBankmedelVarde", false, null, true, true);
@@ -5311,11 +6107,11 @@ async function generateArvodePdf() {
     const hm = currentHuvudmanFullData.huvudmanDetails;
     const gm = activeGodManProfile;
 
-    const arvForvalta = parseFloat(document.getElementById("arvForvalta").value) || 0;
-    const arvSorja = parseFloat(document.getElementById("arvSorja").value) || 0;
-    const arvExtra = parseFloat(document.getElementById("arvExtra").value) || 0;
-    const bilersattning = parseFloat(document.getElementById("arvBilersattning").value) || 0;
-    const kostnadsersattningSkattefri = parseFloat(document.getElementById("arvKostnadsersattning").value) || 0;
+    const arvForvalta = normalizeNumericInput("arvForvalta") || 0;
+    const arvSorja = normalizeNumericInput("arvSorja") || 0;
+    const arvExtra = normalizeNumericInput("arvExtra") || 0;
+    const bilersattning = normalizeNumericInput("arvBilersattning") || 0;
+    const kostnadsersattningSkattefri = normalizeNumericInput("arvKostnadsersattning") || 0;
     const deklInskickad = document.getElementById("arvDeklInskickad").value;
 
     const summaArvodeInnanErs = arvForvalta + arvSorja + arvExtra;
@@ -5480,6 +6276,15 @@ async function genereraFsPdfDirekt(kommunNamn, pdfMallFilnamn) {
 
 async function genereraOchLaddaNerForsorjningsstodPdf() {
   console.log("[PDF Gen FS] Startar generering av Försörjningsstöd PDF...");
+  console.log("[PDF Gen FS] ALL WINDOW CURRENT STATE:", {
+    currentFsPdfMallFilnamn: window.currentFsPdfMallFilnamn,
+    currentFsKommunNamn: window.currentFsKommunNamn,
+    currentFsTemplateId: window.currentFsTemplateId
+  });
+  console.log("[PDF Gen FS] currentFsPdfMallFilnamn:", window.currentFsPdfMallFilnamn);
+  console.log("[PDF Gen FS] currentFsKommunNamn:", window.currentFsKommunNamn);
+  console.log("[PDF Gen FS] currentFsTemplateId:", window.currentFsTemplateId);
+  
   if (!currentHuvudmanFullData || !currentHuvudmanFullData.huvudmanDetails) {
     alert("Välj en huvudman först. PDF-generering avbruten.");
     return;
@@ -5488,7 +6293,12 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
     alert("Välj en aktiv God Man-profil. PDF-generering avbruten.");
     return;
   }
-  if (!currentFsPdfMallFilnamn || !currentFsKommunNamn) {
+  if (!window.currentFsPdfMallFilnamn || !window.currentFsKommunNamn) {
+    console.error("[PDF Gen FS] FELDATA:", {
+      currentFsPdfMallFilnamn: window.currentFsPdfMallFilnamn,
+      currentFsKommunNamn: window.currentFsKommunNamn,
+      currentFsTemplateId: window.currentFsTemplateId
+    });
     alert("Internt fel: Mallfilnamn eller kommunnamn för PDF saknas. PDF-generering avbruten.");
     return;
   }
@@ -5496,15 +6306,15 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
   const gm = activeGodManProfile;
   console.log("[PDF Gen FS] Data för PDF (hm-objekt):", JSON.parse(JSON.stringify(hm)));
   console.log("[PDF Gen FS] Alla keys i hm-objekt:", Object.keys(hm));
-  console.log("[PDF Gen FS] Kostnadsfält - Hyra:", hm.Hyra, "ElKostnad:", hm.ElKostnad, "Bredband:", hm.Bredband);
+  console.log("[PDF Gen FS] Kostnadsfält - Hyra:", getCaseInsensitive(hm, "Hyra"), "ElKostnad:", getCaseInsensitive(hm, "ElKostnad"), "Bredband:", getCaseInsensitive(hm, "Bredband"));
   const idag = new Date();
-  const ansokanDatumPdf = hm.AnsokanDatum || idag.toISOString().slice(0, 10);
-  const ansokanAvserArPdf = String(hm.AnsokanAvserAr || idag.getFullYear());
-  let ansokanAvserManadPdf = hm.AnsokanAvserManad || idag.toLocaleString("sv-SE", { month: "long" });
+  const ansokanDatumPdf = getCaseInsensitive(hm, "AnsokanDatum") || idag.toISOString().slice(0, 10);
+  const ansokanAvserArPdf = String(getCaseInsensitive(hm, "AnsokanAvserAr") || idag.getFullYear());
+  let ansokanAvserManadPdf = getCaseInsensitive(hm, "AnsokanAvserManad") || idag.toLocaleString("sv-SE", { month: "long" });
   console.log(
     `[PDF Gen FS] Ansökningsdatum: ${ansokanDatumPdf}, Avser År: ${ansokanAvserArPdf}, Avser Månad: ${ansokanAvserManadPdf}`
   );
-  const ovrigInfoPdf = hm.ArsrOvrigaUpplysningar || "";
+  const ovrigInfoPdf = getCaseInsensitive(hm, "ArsrOvrigaUpplysningar") || "";
   console.log("[PDF Gen FS] Övrig Info (hämtad från ArsrOvrigaUpplysningar):", ovrigInfoPdf);
   if (!window.PDFLib || !window.fontkit) {
     alert("PDF-bibliotek (PDFLib eller Fontkit) är inte korrekt laddat.");
@@ -5513,20 +6323,40 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
   const { PDFDocument, rgb } = window.PDFLib;
   const fontkit = window.fontkit;
   try {
-    const templateUrl = `/${currentFsPdfMallFilnamn}`;
-    const fontUrl = "/fonts/LiberationSans-Regular.ttf";
+    // Fallback: Hämta filnamnet från mappningen om det inte är satt
+    let pdfFilnamn = window.currentFsPdfMallFilnamn;
+    if (!pdfFilnamn && window.currentFsKommunNamn) {
+      pdfFilnamn = (window.FS_PDF_FILENAMES_BY_NAME || {})[window.currentFsKommunNamn] || "";
+      console.log(`[PDF Gen FS] Fallback: Hämtad filnamn från mappning för ${window.currentFsKommunNamn}: ${pdfFilnamn}`);
+    }
+    
+    if (!pdfFilnamn) {
+      throw new Error(`PDF-filnamn saknas för ${window.currentFsKommunNamn || 'okänd kommun'}`);
+    }
+    
+    const templateUrl = `./${pdfFilnamn}`;
+    const fontUrl = "./fonts/LiberationSans-Regular.ttf";
     console.log(`[PDF Gen FS] Laddar mall från: ${templateUrl} och font från: ${fontUrl}`);
-    const [existingPdfBytes, fontBytes] = await Promise.all([
-      fetch(templateUrl).then(res => {
-        if (!res.ok)
-          throw new Error(`Kunde inte ladda mall ${currentFsPdfMallFilnamn}: ${res.statusText} (${res.status})`);
-        return res.arrayBuffer();
-      }),
-      fetch(fontUrl).then(res => {
-        if (!res.ok) throw new Error(`Kunde inte ladda font: ${res.statusText} (${res.status})`);
-        return res.arrayBuffer();
-      }),
-    ]);
+    console.log(`[PDF Gen FS] Full URL för mall: ${window.location.origin}/${templateUrl}`);
+    
+    console.log("[PDF Gen FS] Fetching PDF-mall...");
+    const pdfResponse = await fetch(templateUrl);
+    console.log(`[PDF Gen FS] PDF-response status: ${pdfResponse.status}, ok: ${pdfResponse.ok}`);
+    if (!pdfResponse.ok) {
+      throw new Error(`Kunde inte ladda PDF-mall "${pdfFilnamn}": ${pdfResponse.statusText} (${pdfResponse.status})`);
+    }
+    const existingPdfBytes = await pdfResponse.arrayBuffer();
+    console.log(`[PDF Gen FS] PDF-mall laddat: ${existingPdfBytes.byteLength} bytes`);
+    
+    console.log("[PDF Gen FS] Fetching font...");
+    const fontResponse = await fetch(fontUrl);
+    console.log(`[PDF Gen FS] Font-response status: ${fontResponse.status}, ok: ${fontResponse.ok}`);
+    if (!fontResponse.ok) {
+      throw new Error(`Kunde inte ladda font: ${fontResponse.statusText} (${fontResponse.status})`);
+    }
+    const fontBytes = await fontResponse.arrayBuffer();
+    console.log(`[PDF Gen FS] Font laddat: ${fontBytes.byteLength} bytes`);
+    
     console.log("[PDF Gen FS] Mall och font har laddats.");
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
     pdfDoc.registerFontkit(fontkit);
@@ -5534,67 +6364,155 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
     const form = pdfDoc.getForm();
     console.log("[PDF Gen FS] Formulär-objekt hämtat.");
 
-    // Fyll i fälten
-    trySetTextField(form, "heltNamn", `${hm.Fornamn || ""} ${hm.Efternamn || ""}`);
-    trySetTextField(form, "personnummer", hm.Personnummer);
-    trySetTextField(form, "adress", hm.Adress);
-    trySetTextField(form, "postnummer", hm.Postnummer);
-    trySetTextField(form, "ort", hm.Ort);
-    trySetTextField(form, "telefon", hm.Telefon || hm.Mobil || "");
-    trySetTextField(form, "epost", hm.Epost);
-    trySetTextField(form, "medborgarskap", hm.Medborgarskap);
-    trySetTextField(form, "civilstand", hm.Civilstand);
-    trySetTextField(form, "datum", ansokanDatumPdf);
-    trySetTextField(form, "Ansokan_AvserManad", ansokanAvserManadPdf);
-    trySetTextField(form, "Ansokan_AvserAr", ansokanAvserArPdf);
-    const isSammanboende = hm.Sammanboende === 1 || String(hm.Sammanboende) === "1";
-    if (isSammanboende) {
-      trySetTextField(form, "medsokandeFornamn", hm.MedsokandeFornamn);
-      trySetTextField(form, "medsokandeEfternamn", hm.MedsokandeEfternamn);
-      trySetTextField(form, "medsokandePersonnummer", hm.MedsokandePersonnummer);
-    }
-    trySetTextField(form, "boendeNamn", hm.BoendeNamn);
-    trySetTextField(form, "bostadAntalRum", String(hm.BostadAntalRum || ""));
-    trySetTextField(form, "bostadAntalBoende", String(hm.BostadAntalBoende || ""));
-    trySetTextField(form, "sysselsattning", hm.Sysselsattning);
-    const kostnaderAttFylla = [
-      { pdfFaltnamn: "hyra", hmDataNyckel: "Hyra" },
-      { pdfFaltnamn: "elKostnad", hmDataNyckel: "ElKostnad" },
-      { pdfFaltnamn: "fackAvgiftAkassa", hmDataNyckel: "FackAvgiftAkassa" },
-      { pdfFaltnamn: "reskostnader", hmDataNyckel: "Reskostnader" },
-      { pdfFaltnamn: "hemforsakring", hmDataNyckel: "Hemforsakring" },
-      { pdfFaltnamn: "medicinkostnad", hmDataNyckel: "MedicinKostnad" },
-      { pdfFaltnamn: "lakarvardskostnad", hmDataNyckel: "Lakarvardskostnad" },
-      { pdfFaltnamn: "barnomsorgAvgift", hmDataNyckel: "BarnomsorgAvgift" },
-      { pdfFaltnamn: "fardtjanstAvgift", hmDataNyckel: "FardtjanstAvgift" },
-      { pdfFaltnamn: "akutTandvardskostnad", hmDataNyckel: "AkutTandvardskostnad" },
-      { pdfFaltnamn: "bredband", hmDataNyckel: "Bredband" },
-      { pdfFaltnamn: "ovrigKostnadBeskrivning", hmDataNyckel: "OvrigKostnadBeskrivning", ärText: true },
-      { pdfFaltnamn: "ovrigKostnadBelopp", hmDataNyckel: "OvrigKostnadBelopp" },
-    ];
-    let summaUtgifter = 0;
-    console.log("[PDF Gen FS] Försöker fylla kostnader. Kostnad-mappning:", kostnaderAttFylla.map(k => `${k.hmDataNyckel}→${k.pdfFaltnamn}`).join(", "));
-    kostnaderAttFylla.forEach(kostnad => {
-      const vardeFranHm = hm[kostnad.hmDataNyckel];
-      console.log(`[PDF Gen FS] Kostnad ${kostnad.hmDataNyckel}: Värde från HM = ${vardeFranHm}`);
-      if (vardeFranHm !== null && vardeFranHm !== undefined && String(vardeFranHm).trim() !== "") {
-        if (kostnad.ärText) {
-          trySetTextField(form, kostnad.pdfFaltnamn, String(vardeFranHm));
-        } else {
-          const numerisktVarde = parseFloat(String(vardeFranHm).replace(",", "."));
-          if (!isNaN(numerisktVarde)) {
-            summaUtgifter += numerisktVarde;
-            trySetTextField(form, kostnad.pdfFaltnamn, formatBeloppForPdf(numerisktVarde));
-          } else {
-            trySetTextField(form, kostnad.pdfFaltnamn, "");
-          }
+    const templateFileName = (window.currentFsPdfMallFilnamn || "").split("/").pop() || window.currentFsPdfMallFilnamn || "";
+    const templateKeySlug = templateFileName
+      ? (window.FS_TEMPLATE_KEYS_BY_FILE?.[templateFileName] || templateFileName.replace(/\.pdf$/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "-"))
+      : "";
+    const templateConfig = templateKeySlug ? getPdfTemplateConfig(templateKeySlug) : null;
+
+    if (templateConfig) {
+      console.log(`[PDF Gen FS] Använder template-config '${templateKeySlug}' (${templateConfig.file})`);
+      const hmForPdf = { ...hm };
+      const gmFullName = `${gm.Fornamn || ""} ${gm.Efternamn || ""}`.trim();
+      if (!hmForPdf.GODMAN_NAMN && gmFullName) hmForPdf.GODMAN_NAMN = gmFullName;
+      if (!hmForPdf.Telefon && hm.Telefon) hmForPdf.Telefon = hm.Telefon;
+      if (!hmForPdf.TELEFON_SOKANDE) hmForPdf.TELEFON_SOKANDE = hm.Telefon || hm.Mobil || "";
+      if (!hmForPdf.HANDLAGGARE && hm.Handlaggare) hmForPdf.HANDLAGGARE = hm.Handlaggare;
+      if (!hmForPdf.FS_KOMMUNHANDLAGGARE) hmForPdf.FS_KOMMUNHANDLAGGARE = hm.Handlaggare || window.currentFsKommunNamn || "";
+      if (!hmForPdf.FS_KommunHandlaggare && hmForPdf.FS_KOMMUNHANDLAGGARE)
+        hmForPdf.FS_KommunHandlaggare = hmForPdf.FS_KOMMUNHANDLAGGARE;
+      if (!hmForPdf.ANSOKAN_AVSER_MANAD) hmForPdf.ANSOKAN_AVSER_MANAD = ansokanAvserManadPdf;
+      if (!hmForPdf.ANSOKAN_AVSER_AR) hmForPdf.ANSOKAN_AVSER_AR = ansokanAvserArPdf;
+      if (!hmForPdf.FS_AnsokanAvserManad_Sparad) hmForPdf.FS_AnsokanAvserManad_Sparad = ansokanAvserManadPdf;
+      if (!hmForPdf.FS_AnsokanAvserAr_Sparad) hmForPdf.FS_AnsokanAvserAr_Sparad = ansokanAvserArPdf;
+
+      const contextValues = {
+        today: formatDateForPdf(ansokanDatumPdf) || formatDateForPdf(new Date().toISOString().slice(0, 10)),
+        monthName: ansokanAvserManadPdf,
+        year: ansokanAvserArPdf,
+        formType: templateConfig.file?.replace(/\.pdf$/i, "") || templateConfig.name || templateKeySlug,
+      };
+
+      const mappedValues = buildPdfFieldValuesFromConfig(hmForPdf, templateConfig, contextValues);
+      Object.entries(mappedValues).forEach(([fieldName, fieldValue]) => {
+        trySetTextField(form, fieldName, fieldValue);
+      });
+      if (ovrigInfoPdf) {
+        const fallbackOvrigField = Object.keys(mappedValues).find(name => name.toLowerCase().includes("ovrig") && name.toLowerCase().includes("info"));
+        if (!fallbackOvrigField) {
+          trySetTextField(form, "ovrigaUpplysningar", ovrigInfoPdf);
         }
-      } else {
-        trySetTextField(form, kostnad.pdfFaltnamn, "");
       }
-    });
-    trySetTextField(form, "summaUtgifter", formatBeloppForPdf(summaUtgifter));
-    trySetTextField(form, "ovrigaUpplysningar", ovrigInfoPdf);
+    } else {
+      console.warn(`[PDF Gen FS] Ingen template-config hittades för '${templateFileName}'. Faller tillbaka till generisk fyllning.`);
+
+      // Fyll i fälten (generisk fallback)
+      trySetTextField(form, "heltNamn", `${hm.Fornamn || ""} ${hm.Efternamn || ""}`);
+      trySetTextField(form, "personnummer", hm.Personnummer);
+      trySetTextField(form, "adress", hm.Adress);
+      trySetTextField(form, "postnummer", hm.Postnummer);
+      trySetTextField(form, "ort", hm.Ort);
+      trySetTextField(form, "telefon", hm.Telefon || hm.Mobil || "");
+      trySetTextField(form, "epost", hm.Epost);
+      trySetTextField(form, "medborgarskap", hm.Medborgarskap);
+      trySetTextField(form, "civilstand", hm.Civilstand);
+      trySetTextField(form, "datum", ansokanDatumPdf);
+      trySetTextField(form, "Ansokan_AvserManad", ansokanAvserManadPdf);
+      trySetTextField(form, "Ansokan_AvserAr", ansokanAvserArPdf);
+      const isSammanboende = getCaseInsensitive(hm, "Sammanboende") === 1 || String(getCaseInsensitive(hm, "Sammanboende")) === "1";
+      if (isSammanboende) {
+        trySetTextField(form, "medsokandeFornamn", getCaseInsensitive(hm, "MedsokandeFornamn"));
+        trySetTextField(form, "medsokandeEfternamn", getCaseInsensitive(hm, "MedsokandeEfternamn"));
+        trySetTextField(form, "medsokandePersonnummer", getCaseInsensitive(hm, "MedsokandePersonnummer"));
+      }
+      trySetTextField(form, "boendeNamn", getCaseInsensitive(hm, "BoendeNamn"));
+      trySetTextField(form, "bostadAntalRum", String(getCaseInsensitive(hm, "BostadAntalRum") || ""));
+      trySetTextField(form, "bostadAntalBoende", String(getCaseInsensitive(hm, "BostadAntalBoende") || ""));
+      trySetTextField(form, "sysselsattning", getCaseInsensitive(hm, "Sysselsattning"));
+      trySetTextField(form, "handlaggare", getCaseInsensitive(hm, "Handlaggare") || "");
+      const kostnaderAttFylla = [
+        { pdfFaltnamn: "hyra", hmDataNyckel: "Hyra" },
+        { pdfFaltnamn: "elKostnad", hmDataNyckel: "ElKostnad" },
+        { pdfFaltnamn: "fackAvgiftAkassa", hmDataNyckel: "FackAvgiftAkassa" },
+        { pdfFaltnamn: "reskostnader", hmDataNyckel: "Reskostnader" },
+        { pdfFaltnamn: "hemforsakring", hmDataNyckel: "Hemforsakring" },
+        { pdfFaltnamn: "medicinkostnad", hmDataNyckel: "MedicinKostnad" },
+        { pdfFaltnamn: "lakarvardskostnad", hmDataNyckel: "Lakarvardskostnad" },
+        { pdfFaltnamn: "barnomsorgAvgift", hmDataNyckel: "BarnomsorgAvgift" },
+        { pdfFaltnamn: "fardtjanstAvgift", hmDataNyckel: "FardtjanstAvgift" },
+        { pdfFaltnamn: "akutTandvardskostnad", hmDataNyckel: "AkutTandvardskostnad" },
+        { pdfFaltnamn: "bredband", hmDataNyckel: "Bredband" },
+        { pdfFaltnamn: "ovrigKostnadBeskrivning", hmDataNyckel: "OvrigKostnadBeskrivning", ärText: true },
+        { pdfFaltnamn: "ovrigKostnadBelopp", hmDataNyckel: "OvrigKostnadBelopp" },
+      ];
+      let summaUtgifter = 0;
+      console.log("[PDF Gen FS] Försöker fylla kostnader. Kostnad-mappning:", kostnaderAttFylla.map(k => `${k.hmDataNyckel}→${k.pdfFaltnamn}`).join(", "));
+      kostnaderAttFylla.forEach(kostnad => {
+        const vardeFranHm = getCaseInsensitive(hm, kostnad.hmDataNyckel);
+        console.log(`[PDF Gen FS] Kostnad ${kostnad.hmDataNyckel}: Värde från HM = ${vardeFranHm}`);
+        if (vardeFranHm !== null && vardeFranHm !== undefined && String(vardeFranHm).trim() !== "") {
+          if (kostnad.ärText) {
+            trySetTextField(form, kostnad.pdfFaltnamn, String(vardeFranHm));
+          } else {
+            const numerisktVarde = parseFloat(String(vardeFranHm).replace(",", "."));
+            if (!isNaN(numerisktVarde)) {
+              summaUtgifter += numerisktVarde;
+              trySetTextField(form, kostnad.pdfFaltnamn, formatBeloppForPdf(numerisktVarde));
+            } else {
+              trySetTextField(form, kostnad.pdfFaltnamn, "");
+            }
+          }
+        } else {
+          trySetTextField(form, kostnad.pdfFaltnamn, "");
+        }
+      });
+      trySetTextField(form, "summaUtgifter", formatBeloppForPdf(summaUtgifter));
+      trySetTextField(form, "ovrigaUpplysningar", ovrigInfoPdf);
+
+      // Fyll i INKOMSTER
+      const inkomssterAttFylla = [
+        { pdfFaltnamn: "lon", hmDataNyckel: "Lon" },
+        { pdfFaltnamn: "pensionSjukers", hmDataNyckel: "PensionLivrantaSjukAktivitet" },
+        { pdfFaltnamn: "sjukpenning", hmDataNyckel: "SjukpenningForaldrapenning" },
+        { pdfFaltnamn: "arbetsloshetsersattning", hmDataNyckel: "Arbetsloshetserstattning" },
+        { pdfFaltnamn: "bostadsbidrag", hmDataNyckel: "Bostadsbidrag" },
+        { pdfFaltnamn: "barnbidrag", hmDataNyckel: "BarnbidragStudiebidrag" },
+        { pdfFaltnamn: "skatteaterbar", hmDataNyckel: "Skatteaterbaring" },
+        { pdfFaltnamn: "studiemedel", hmDataNyckel: "Studiemedel" },
+        { pdfFaltnamn: "vantadInkomstBeskrivning", hmDataNyckel: "VantadInkomstBeskrivning", ärText: true },
+        { pdfFaltnamn: "vantadInkomstBelopp", hmDataNyckel: "VantadInkomstBelopp" },
+        { pdfFaltnamn: "ovrigInkomstBeskrivning", hmDataNyckel: "OvrigInkomstBeskrivning", ärText: true },
+        { pdfFaltnamn: "ovrigInkomstBelopp", hmDataNyckel: "OvrigInkomstBelopp" },
+        { pdfFaltnamn: "underhallsstod", hmDataNyckel: "UnderhallsstodEfterlevandepension" },
+        { pdfFaltnamn: "avtalsforsakring", hmDataNyckel: "AvtalsforsakringAfa" },
+        { pdfFaltnamn: "hyresintakt", hmDataNyckel: "HyresintaktInneboende" },
+        { pdfFaltnamn: "barnsinkomst", hmDataNyckel: "BarnsInkomst" },
+        { pdfFaltnamn: "etablering", hmDataNyckel: "Etableringsersattning" },
+      ];
+      let summaInkomster = 0;
+      console.log("[PDF Gen FS] Försöker fylla inkomster. Inkomst-mappning:", inkomssterAttFylla.map(i => `${i.hmDataNyckel}→${i.pdfFaltnamn}`).join(", "));
+      inkomssterAttFylla.forEach(inkomst => {
+        const vardeFranHm = getCaseInsensitive(hm, inkomst.hmDataNyckel);
+        console.log(`[PDF Gen FS] Inkomst ${inkomst.hmDataNyckel}: Värde från HM = ${vardeFranHm}`);
+        if (vardeFranHm !== null && vardeFranHm !== undefined && String(vardeFranHm).trim() !== "") {
+          if (inkomst.ärText) {
+            trySetTextField(form, inkomst.pdfFaltnamn, String(vardeFranHm));
+          } else {
+            const numerisktVarde = parseFloat(String(vardeFranHm).replace(",", "."));
+            if (!isNaN(numerisktVarde)) {
+              summaInkomster += numerisktVarde;
+              trySetTextField(form, inkomst.pdfFaltnamn, formatBeloppForPdf(numerisktVarde));
+            } else {
+              trySetTextField(form, inkomst.pdfFaltnamn, "");
+            }
+          }
+        } else {
+          trySetTextField(form, inkomst.pdfFaltnamn, "");
+        }
+      });
+      trySetTextField(form, "summaInkomster", formatBeloppForPdf(summaInkomster));
+    }
+    
     console.log("[PDF Gen FS] Alla fält har försökts fyllas i. Uppdaterar utseende och plattar till...");
     form.getFields().forEach(field => {
       try {
@@ -5609,17 +6527,17 @@ async function genereraOchLaddaNerForsorjningsstodPdf() {
     console.log("[PDF Gen FS] PDF:en är nu tillplattad.");
     const pdfBytes = await pdfDoc.save();
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
-    const filename = `AnsokanFS_${currentFsKommunNamn.replace(/\s+/g, "_")}_${(hm.Personnummer || "hm").replace(
+    const filename = `AnsokanFS_${window.currentFsKommunNamn.replace(/\s+/g, "_")}_${(hm.Personnummer || "hm").replace(
       /\W/g,
       "_"
     )}_${ansokanAvserManadPdf}_${ansokanAvserArPdf}.pdf`;
     triggerDownload(blob, filename);
-    alert(`PDF-ansökan för Försörjningsstöd (${currentFsKommunNamn}) genererad!`);
+    alert(`PDF-ansökan för Försörjningsstöd (${window.currentFsKommunNamn}) genererad!`);
     console.log(`[PDF Gen FS] PDF '${filename}' skickad för nedladdning.`);
   } catch (error) {
-    console.error(`[PDF Gen FS] Allvarligt fel under PDF-generering för ${currentFsKommunNamn}:`, error);
+    console.error(`[PDF Gen FS] Allvarligt fel under PDF-generering för ${window.currentFsKommunNamn}:`, error);
     alert(
-      `Kunde inte skapa PDF-ansökan för ${currentFsKommunNamn}.\nFel: ${error.message}\nSe konsolen för mer detaljer.`
+      `Kunde inte skapa PDF-ansökan för ${window.currentFsKommunNamn}.\nFel: ${error.message}\nSe konsolen för mer detaljer.`
     );
   }
 }
@@ -5711,10 +6629,10 @@ async function genereraSKV4805Pdf() {
     return;
   }
 
-  const arvForvalta = parseFloat(arvForvaltaEl.value) || 0;
-  const arvSorja = parseFloat(arvSorjaEl.value) || 0;
-  const arvExtra = parseFloat(arvExtraEl.value) || 0;
-  const skattepliktigKostnadsersattningRuta20 = parseFloat(skattepliktigKostnadsersattningEl.value) || 0;
+  const arvForvalta = normalizeNumericInput("arvForvalta") || 0;
+  const arvSorja = normalizeNumericInput("arvSorja") || 0;
+  const arvExtra = normalizeNumericInput("arvExtra") || 0;
+  const skattepliktigKostnadsersattningRuta20 = normalizeNumericInput("arvSkattepliktigKostnadsersattning") || 0;
 
   const summa1_bruttolon_ruta04_eller_11 = arvForvalta + arvSorja + arvExtra;
   const underlagForSkatteavdrag_06 = summa1_bruttolon_ruta04_eller_11;
@@ -6595,11 +7513,11 @@ function openAdjustmentModal(transactionId) {
 }
 
 function calculateAdjustedGrossIncome() {
-  const originalAmount = parseFloat(document.getElementById("adjustmentOriginalAmountValue").value) || 0;
-  const tax = parseFloat(document.getElementById("adjustmentTax").value) || 0;
-  const garnishment = parseFloat(document.getElementById("adjustmentGarnishment").value) || 0;
-  const housing = parseFloat(document.getElementById("adjustmentHousing").value) || 0;
-  const addCost = parseFloat(document.getElementById("adjustmentAddCost").value) || 0;
+  const originalAmount = normalizeNumericInput("adjustmentOriginalAmountValue") || 0;
+  const tax = normalizeNumericInput("adjustmentTax") || 0;
+  const garnishment = normalizeNumericInput("adjustmentGarnishment") || 0;
+  const housing = normalizeNumericInput("adjustmentHousing") || 0;
+  const addCost = normalizeNumericInput("adjustmentAddCost") || 0;
   const calculatedGross = originalAmount + tax + garnishment - housing - addCost;
   document.getElementById("adjustmentCalculatedGross").textContent = formatCurrencyForPdf(calculatedGross);
   document.getElementById("adjustmentCalculatedHousing").textContent = formatCurrencyForPdf(housing);
@@ -6612,10 +7530,10 @@ function saveTransactionAdjustments() {
   if (!transaction) return;
 
   // Hämta justeringsvärdena från modalen
-  const tax = parseFloat(document.getElementById("adjustmentTax").value) || 0;
-  const garnishment = parseFloat(document.getElementById("adjustmentGarnishment").value) || 0;
-  const housing = parseFloat(document.getElementById("adjustmentHousing").value) || 0;
-  const addCost = parseFloat(document.getElementById("adjustmentAddCost").value) || 0;
+  const tax = normalizeNumericInput("adjustmentTax") || 0;
+  const garnishment = normalizeNumericInput("adjustmentGarnishment") || 0;
+  const housing = normalizeNumericInput("adjustmentHousing") || 0;
+  const addCost = normalizeNumericInput("adjustmentAddCost") || 0;
 
   // 1. Uppdatera den aktuella transaktionen som du redigerade
   transaction.justeringar = {
@@ -6718,11 +7636,11 @@ function openArvodesModal() {
 }
 
 function beraknaArvode() {
-  const arvForvalta = parseFloat(document.getElementById("arvForvalta").value) || 0;
-  const arvSorja = parseFloat(document.getElementById("arvSorja").value) || 0;
-  const arvExtra = parseFloat(document.getElementById("arvExtra").value) || 0;
-  const bilersattning = parseFloat(document.getElementById("arvBilersattning").value) || 0;
-  const kostnadsersattning = parseFloat(document.getElementById("arvKostnadsersattning").value) || 0;
+  const arvForvalta = normalizeNumericInput("arvForvalta") || 0;
+  const arvSorja = normalizeNumericInput("arvSorja") || 0;
+  const arvExtra = normalizeNumericInput("arvExtra") || 0;
+  const bilersattning = normalizeNumericInput("arvBilersattning") || 0;
+  const kostnadsersattning = normalizeNumericInput("arvKostnadsersattning") || 0;
   const summa1 = arvForvalta + arvSorja + arvExtra;
   const summaErsattning = bilersattning + kostnadsersattning;
   const arvodeEfterSkatt = Math.round(summa1 * 0.7);
@@ -7489,15 +8407,6 @@ window.FS_TEMPLATE_IDS_BY_NAME = window.FS_TEMPLATE_IDS_BY_NAME || {
   "Stockholm Stad":   6
 };
 
-// Mappning av kommun-namn till PDF-mallfilnamn
-window.FS_PDF_FILENAMES_BY_NAME = window.FS_PDF_FILENAMES_BY_NAME || {
-  "Upplands Väsby":   "pdf_templates/Ansokan_Upplands_Vasby.pdf",
-  "Järfälla Kommun":  "pdf_templates/Ansokan_Jarfalla.pdf",
-  "Sigtuna Kommun":   "pdf_templates/Ansokan_Sigtuna.pdf",
-  "Solna Stad":       "pdf_templates/Ansokan_Solna.pdf",
-  "Stockholm Stad":   "pdf_templates/Ansokan_Stockholm.pdf"
-};
-
 function getSelectedPnr() {
   const el = document.getElementById("huvudmanSelect");
   return el ? el.value : "";
@@ -7543,6 +8452,13 @@ window.openForsorjningsstodModal = function openForsorjningsstodModal(kommunNamn
 
   // Spara (bakåtkompatibelt) - hämta PDF-filnamn från mappning om inte skickat som parameter
   const pdfFilnamn = mallFilnamn || (window.FS_PDF_FILENAMES_BY_NAME || {})[kommunNamn] || "";
+  console.log(`[FS Modal DEBUG] Mapping innehåller:`, window.FS_PDF_FILENAMES_BY_NAME);
+  console.log(`[FS Modal DEBUG] Söker efter kommun: '${kommunNamn}'`);
+  console.log(`[FS Modal DEBUG] Hittat pdfFilnamn: '${pdfFilnamn}'`);
+  
+  // VIKTIGT: Spara PDF-filnamnet globalt så det finns när vi genererar PDF senare
+  window.currentFsPdfMallFilnamn = pdfFilnamn;
+  
   window.currentFsTemplateId   = tid;
   window.currentFsPdfMallFilnamn = pdfFilnamn;
   window.currentFsKommunNamn     = kommunNamn;
@@ -7671,15 +8587,15 @@ window.openForsorjningsstodModal = function openForsorjningsstodModal(kommunNamn
   const bostadContainerId = "fsVisningBostadContainer";
   const bostadContainerEl = document.getElementById(bostadContainerId);
   if (bostadContainerEl) bostadContainerEl.innerHTML = "";
-  addTextToContainer(bostadContainerId, "Adress", hm.Adress || "");
-  addTextToContainer(bostadContainerId, "Postnummer", hm.Postnummer || "");
-  addTextToContainer(bostadContainerId, "Ort", hm.Ort || "");
-  addTextToContainer(bostadContainerId, "Telefon/E-post", hm.Telefon || hm.Mobil || hm.Epost || "");
-  addTextToContainer(bostadContainerId, "Antal rum", hm.BostadAntalRum);
-  addTextToContainer(bostadContainerId, "Antal boende", hm.BostadAntalBoende);
-  addTextToContainer(bostadContainerId, "Hyresvärd", hm.BoendeNamn);
-  addTextToContainer(bostadContainerId, "Typ av boende", hm.BostadTyp);
-  addTextToContainer(bostadContainerId, "Kontraktstid", hm.BostadKontraktstid || "tillsvidare");
+  addTextToContainer(bostadContainerId, "Adress", getCaseInsensitive(hm, "Adress") || "");
+  addTextToContainer(bostadContainerId, "Postnummer", getCaseInsensitive(hm, "Postnummer") || "");
+  addTextToContainer(bostadContainerId, "Ort", getCaseInsensitive(hm, "Ort") || "");
+  addTextToContainer(bostadContainerId, "Telefon/E-post", getCaseInsensitive(hm, "Telefon") || getCaseInsensitive(hm, "Mobil") || getCaseInsensitive(hm, "Epost") || "");
+  addTextToContainer(bostadContainerId, "Antal rum", getCaseInsensitive(hm, "BostadAntalRum"));
+  addTextToContainer(bostadContainerId, "Antal boende", getCaseInsensitive(hm, "BostadAntalBoende"));
+  addTextToContainer(bostadContainerId, "Hyresvärd", getCaseInsensitive(hm, "BoendeNamn"));
+  addTextToContainer(bostadContainerId, "Typ av boende", getCaseInsensitive(hm, "BostadTyp"));
+  addTextToContainer(bostadContainerId, "Kontraktstid", getCaseInsensitive(hm, "BostadKontraktstid") || "tillsvidare");
 
   const sysselContainer = "fsVisningSysselsattningContainer";
   addTextToContainer(sysselContainer, "Sökande", hm.Sysselsattning || "");
@@ -8040,6 +8956,15 @@ async function saveHuvudmanFullDetails() {
     }
 
     if (response.ok) {
+      // Uppdatera den lokala cachen direkt så att värdena ligger kvar i formuläret
+      if (!currentHuvudmanFullData) {
+        currentHuvudmanFullData = { huvudmanDetails: {}, bankkontonStart: [], bankkontonSlut: [] };
+      }
+      currentHuvudmanFullData.huvudmanDetails = {
+        ...(currentHuvudmanFullData.huvudmanDetails || {}),
+        ...(dataToSave.details || {}),
+      };
+
       alert(result.message || "Ändringar sparade!");
       console.log("[SAVE] Servern svarade OK.", result);
       await loadHuvudmanFullDetails(true); // Tvinga omladdning från server
@@ -8656,20 +9581,30 @@ async function sparaForsorjningsstodsData() {
     alert("Ingen huvudman vald att spara data för.");
     return;
   }
+
+  // 🔧 Normalisera svensk tal-input ("1 234,56" -> "1234.56")
+  const num = (id) => {
+    const raw = (document.getElementById(id)?.value ?? "").toString().trim();
+    if (raw === "") return null;
+    const cleaned = raw.replace(/\s/g, "").replace(",", ".");
+    const v = parseFloat(cleaned);
+    return Number.isNaN(v) ? null : v;
+  };
+
   const dataAttSpara = {
-    Hyra: parseFloat(document.getElementById("hyra")?.value) || null,
-    Bredband: parseFloat(document.getElementById("bredband")?.value) || null,
-    ElKostnad: parseFloat(document.getElementById("elKostnad")?.value) || null, // Använder generellt fält
-    Hemforsakring: parseFloat(document.getElementById("hemforsakring")?.value) || null,
-    FackAvgiftAkassa: parseFloat(document.getElementById("fackAvgiftAkassa")?.value) || null, // Använder generellt fält
-    Reskostnader: parseFloat(document.getElementById("reskostnader")?.value) || null, // Använder generellt fält
-    Lakarvardskostnad: parseFloat(document.getElementById("lakarvardskostnad")?.value) || null, // Använder generellt fält
-    MedicinKostnad: parseFloat(document.getElementById("medicinKostnad")?.value) || null, // Använder generellt fält
-    BarnomsorgAvgift: parseFloat(document.getElementById("barnomsorgAvgift")?.value) || null, // Använder generellt fält
-    FardtjanstAvgift: parseFloat(document.getElementById("fardtjanstAvgift")?.value) || null, // Använder generellt fält
-    AkutTandvardskostnad: parseFloat(document.getElementById("akutTandvardskostnad")?.value) || null, // Använder generellt fält
-    OvrigKostnadBeskrivning: document.getElementById("ovrigKostnadBeskrivning")?.value || "", // Använder generellt fält
-    OvrigKostnadBelopp: parseFloat(document.getElementById("ovrigKostnadBelopp")?.value) || null, // Använder generellt fält
+    HYRA: num("hyra"),
+    BREDBAND: num("bredband"),
+    EL_KOSTNAD: num("elKostnad"),
+    HEMFORSAKRING: num("hemforsakring"),
+    FACK_AVGIFT_AKASSA: num("fackAvgiftAkassa"),
+    RESKOSTNADER: num("reskostnader"),
+    LAKARVARDSKOSTNAD: num("lakarvardskostnad"),
+    MEDICIN_KOSTNAD: num("medicinKostnad"),
+    BARNOMSORG_AVGIFT: num("barnomsorgAvgift"),
+    FARDTJANST_AVGIFT: num("fardtjanstAvgift"),
+    AKUT_TANDVARDSKOSTNAD: num("akutTandvardskostnad"),
+    OVRIG_KOSTNAD_BESKRIVNING: document.getElementById("ovrigKostnadBeskrivning")?.value || "",
+    OVRIG_KOSTNAD_BELOPP: num("ovrigKostnadBelopp"),
     FS_Bostad_AdressLghPost: document.getElementById("fsBostadAdressLghPost")?.value || "",
     FS_Bostad_TelefonEpost: document.getElementById("fsBostadTelefonEpost")?.value || "",
     FS_Bostad_Hyresvard: document.getElementById("fsBostadHyresvard")?.value || "",
@@ -10037,6 +10972,48 @@ function renderDashboard(details, documents = [], bankkonton = []) {
     `;
   wrap.appendChild(myndigheterBox);
 
+  // --- Skapa och lägg till Boende, Sysselsättning & Ekonomi (Generellt) ---
+  const boendeBox = document.createElement("div");
+  boendeBox.className = "box dashboard-kort";
+  boendeBox.id = "ov-boende-sysselsattning";
+  
+  // Debug: Logga vad vi hämtar
+  console.log("[DEBUG] Boende-värden från details:", {
+    BOENDE_NAMN: getCaseInsensitive(details, 'BOENDE_NAMN'),
+    BOSTAD_TYP: getCaseInsensitive(details, 'BOSTAD_TYP'),
+    BOSTAD_ANTAL_RUM: getCaseInsensitive(details, 'BOSTAD_ANTAL_RUM'),
+    BOSTAD_ANTAL_BOENDE: getCaseInsensitive(details, 'BOSTAD_ANTAL_BOENDE'),
+    BOSTAD_KONTRAKTSTID: getCaseInsensitive(details, 'BOSTAD_KONTRAKTSTID'),
+    SYSSELSATTNING: getCaseInsensitive(details, 'SYSSELSATTNING'),
+    INKOMSTTYP: getCaseInsensitive(details, 'INKOMSTTYP'),
+    DEKLARERAT_STATUS: getCaseInsensitive(details, 'DEKLARERAT_STATUS'),
+    ARVODE_UTBETALT_STATUS: getCaseInsensitive(details, 'ARVODE_UTBETALT_STATUS'),
+    MERKOSTNADSERSTATTNING_STATUS: getCaseInsensitive(details, 'MERKOSTNADSERSTATTNING_STATUS')
+  });
+  
+  boendeBox.innerHTML = `
+    <h3><i class="fas fa-home"></i> Boende, Sysselsättning & Ekonomi (Generellt)</h3>
+    <div class="form-grid three-columns">
+      <div class="form-column">
+        <h4>Boende</h4>
+        <div class="input-group"><label>Boende (typ):</label><input type="text" value="${safe(getCaseInsensitive(details, 'BOENDE_NAMN'))}" disabled></div>
+        <div class="input-group"><label>Typ av boende:</label><input type="text" value="${safe(getCaseInsensitive(details, 'BOSTAD_TYP'))}" disabled></div>
+        <div class="input-group"><label>Antal rum:</label><input type="text" value="${safe(getCaseInsensitive(details, 'BOSTAD_ANTAL_RUM'))}" disabled></div>
+        <div class="input-group"><label>Antal boende:</label><input type="text" value="${safe(getCaseInsensitive(details, 'BOSTAD_ANTAL_BOENDE'))}" disabled></div>
+        <div class="input-group"><label>Kontraktstid:</label><input type="text" value="${safe(getCaseInsensitive(details, 'BOSTAD_KONTRAKTSTID'))}" disabled></div>
+      </div>
+      <div class="form-column">
+        <h4>Sysselsättning & Ekonomi</h4>
+        <div class="input-group"><label>Sysselsättning:</label><input type="text" value="${safe(getCaseInsensitive(details, 'SYSSELSATTNING'))}" disabled></div>
+        <div class="input-group"><label>Inkomsttyp:</label><input type="text" value="${safe(getCaseInsensitive(details, 'INKOMSTTYP'))}" disabled></div>
+        <div class="input-group"><label>Deklarerat:</label><input type="text" value="${safe(getCaseInsensitive(details, 'DEKLARERAT_STATUS'))}" disabled></div>
+        <div class="input-group"><label>Arvode utbetalt:</label><input type="text" value="${safe(getCaseInsensitive(details, 'ARVODE_UTBETALT_STATUS'))}" disabled></div>
+        <div class="input-group"><label>Merkostnader:</label><input type="text" value="${safe(getCaseInsensitive(details, 'MERKOSTNADSERSTATTNING_STATUS'))}" disabled></div>
+      </div>
+    </div>
+  `;
+  wrap.appendChild(boendeBox);
+
   // --- Skapa och lägg till Månadsbudget ---
   const budgetBox = document.createElement("div");
   budgetBox.id = "ov-budget";
@@ -10047,10 +11024,13 @@ function renderDashboard(details, documents = [], bankkonton = []) {
         <td><label>${label}</label></td>
         <td><input type="text" id="ov-${levKey}" class="budget-leverantor" placeholder="Leverantör..." value="${safe(
     getCaseInsensitive(details, levKey)
-  )}"></td>
-        <td><input type="number" step="0.01" id="ov-${beloppKey}" class="budget-belopp" placeholder="${placeholder}" value="${safe(
+  )}" disabled></td>
+        <td>
+          <input type="number" step="0.01" id="ov-${beloppKey}" class="budget-belopp" placeholder="${placeholder}" value="${safe(
     getCaseInsensitive(details, beloppKey)
-  )}"></td>
+  )}" disabled>
+          <small style="display: block; text-align: right; color: #666; font-style: italic;">Hämtas från "Generella Kostnader".</small>
+        </td>
         <td>SEK / mån</td>
       </tr>
     `;
@@ -10852,38 +11832,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const ovHyra = document.getElementById("ov-HYRA");
   if (hyra && ovHyra) {
     hyra.addEventListener("input", () => {
-      ovHyra.value = hyra.value || "";
+      // Konvertera komma till punkt för type="number" fält
+      let val = hyra.value || "";
+      if (val && ovHyra.type === "number") {
+        val = val.replace(",", ".");
+      }
+      ovHyra.value = val;
     });
   }
 });
-// --- Spegla Hyra mellan Generella kostnader och Månadsbudget ---
-document.addEventListener("DOMContentLoaded", () => {
-  const hyra = document.getElementById("hyra");
-  const ovHyra = document.getElementById("ov-HYRA");
 
-  if (!hyra || !ovHyra) return;
-
-  // När man skriver i Generella kostnader → uppdatera Månadsbudget
-  hyra.addEventListener("input", () => {
-    ovHyra.value = hyra.value;
-  });
-
-  // När sidan laddas → visa samma värde i båda
-  ovHyra.value = hyra.value;
-});
-document.addEventListener("DOMContentLoaded", () => {
-  const hyra = document.getElementById("hyra");
-  const ovHyra = document.getElementById("ov-HYRA");
-  if (!hyra || !ovHyra) return;
-
-  // Live-spegel: skriv i Generella kostnader → uppdatera Månadsbudget direkt
-  hyra.addEventListener("input", () => {
-    ovHyra.value = hyra.value;
-  });
-
-  // När sidan laddas: synka initialt
-  ovHyra.value = hyra.value;
-});
+// --- Spegla-kod har flyttats till initializeSpeglaSync() som anropas från populateHuvudmanDetailsForm() ---
 
 function setVal(id, val, isCheckbox = false, isRadioName = null, isNumeric = false, isFloat = false) {
   const el = document.getElementById(id);
@@ -10897,19 +11856,29 @@ function setVal(id, val, isCheckbox = false, isRadioName = null, isNumeric = fal
   }
 
   if (isNumeric) {
-    if (val === null || val === undefined || val === "") { el.value = ""; return; }
-    const str = String(val).replace(",", ".");                 // normalisera
-    const num = isFloat ? parseFloat(str) : parseInt(str, 10); // till tal
-    el.value = Number.isNaN(num) ? "" : String(num);           // skriv ALLTID med punkt
-    return;
+    if (val === null || val === undefined || val === "") { 
+      el.value = ""; 
+    } else {
+      const str = String(val).replace(",", ".");
+      const num = isFloat ? parseFloat(str) : parseInt(str, 10);
+      if (Number.isNaN(num)) {
+        el.value = "";
+      } else if (isFloat) {
+        const formatted = num.toFixed(2);
+        console.log(`[setVal GLOBAL] Setting ${id} to PUNKT format: ${formatted}`);
+        // Sätt bara .value, inte attributet
+        el.value = formatted;
+      } else {
+        const strVal = String(num);
+        el.value = strVal;
+      }
+    }
+  } else {
+    el.value = (val ?? "").toString();
   }
 
-  el.value = (val ?? "").toString();
+  // VIKTIGT: Trigga "input" och "change" events för att Spegla-systemet ska uppdatera Månadsbudget
+  // Använd input-värdets naturliga värde (redan formaterat med setAttribute)
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
 }
-document.addEventListener("DOMContentLoaded", () => {
-  const hyra = document.getElementById("hyra");
-  const ovHyra = document.getElementById("ov-HYRA");
-  if (!hyra || !ovHyra) return;
-  hyra.addEventListener("input", () => { ovHyra.value = hyra.value; });
-  ovHyra.value = hyra.value; // initial sync vid laddning
-});

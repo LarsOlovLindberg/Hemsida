@@ -53,8 +53,9 @@ try {
     
     $huvudmanDetails = [];
     foreach ($dbRow as $key => $value) {
-        $pascalKey = str_replace(' ', '', ucwords(str_replace('_', ' ', strtolower($key))));
-        $huvudmanDetails[$pascalKey] = $value;
+        // VIKTIGT: Behåll kolumnnamnen som de är (UPPERCASE) för att matcha mappningen i JavaScript
+        // Ändra INTE till PascalCase - det bryter sökningen i getCI()
+        $huvudmanDetails[$key] = $value;
     }
     $fullData['huvudmanDetails'] = $huvudmanDetails;
 

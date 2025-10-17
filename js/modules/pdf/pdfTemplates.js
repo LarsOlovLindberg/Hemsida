@@ -1,318 +1,779 @@
-// "C:\Users\lars-\gman-web\js\modules\pdf\pdfTemplates.js";
-import state from "../../state.js";
+// ============================================================
+// pdfTemplates.js - PDF-mall generering
+// Sökväg: js/modules/pdf/pdfTemplates.js
+// ============================================================
 
-export async function handleTemplateFileSelect(event) {
-  const fileInput = event.target;
-  const file = fileInput.files?.[0];
-  const templateName = document.getElementById("templateNameInput")?.value?.trim();
-  const statusDiv = document.getElementById("pdfUploadStatus");
-  const mappingSection = document.getElementById("mappingSection");
+import {
+  getCaseInsensitive,
+  safe,
+  formatCurrency,
+  formatDate,
+  formatDateForPdf,
+  yearForFilename,
+  triggerDownload,
+} from "../utils/helpers.js";
 
-  if (!file || !templateName) {
-    alert("Du måste ange ett namn för mallen och välja en PDF-fil.");
-    fileInput.value = "";
-    return;
+// ============================================================
+// PDF CONFIGURATION
+// ============================================================
+
+const PDF_CONFIG = {
+  fonts: {
+    regular: "/fonts/LiberationSans-Regular.ttf",
+    bold: "/fonts/LiberationSans-Bold.ttf",
+    italic: "/fonts/LiberationSans-Italic.ttf",
+  },
+  fallbackFonts: {
+    regular: "Helvetica",
+    bold: "Helvetica-Bold",
+    italic: "Helvetica-Oblique",
+  },
+  pageSize: {
+    width: 595.28, // A4 width in points
+    height: 841.89, // A4 height in points
+  },
+  margins: {
+    top: 50,
+    bottom: 50,
+    left: 50,
+    right: 50,
+  },
+  colors: {
+    black: { r: 0, g: 0, b: 0 },
+    gray: { r: 0.5, g: 0.5, b: 0.5 },
+    lightGray: { r: 0.8, g: 0.8, b: 0.8 },
+    blue: { r: 0, g: 0.4, b: 0.8 },
+    red: { r: 0.8, g: 0, b: 0 },
+    green: { r: 0, g: 0.6, b: 0 },
+  },
+  fontSize: {
+    title: 18,
+    header: 14,
+    subheader: 12,
+    body: 10,
+    small: 8,
+  },
+};
+
+// ============================================================
+// PDF BASE CLASS
+// ============================================================
+
+class PDFGenerator {
+  constructor() {
+    this.pdfDoc = null;
+    this.page = null;
+    this.regularFont = null;
+    this.boldFont = null;
+    this.italicFont = null;
+    this.y = 0;
+    this.pageNumber = 1;
   }
 
-  statusDiv.textContent = "Laddar upp mall till servern...";
-  statusDiv.style.color = "orange";
-  mappingSection.style.display = "none";
+  /**
+   * Initierar PDF-dokumentet.
+   */
+  async initialize() {
+    if (!window.PDFLib) {
+      throw new Error("PDFLib är inte laddat.");
+    }
 
-  const formData = new FormData();
-  formData.append("templateFile", file);
-  formData.append("templateName", templateName);
+    const { PDFDocument, rgb } = window.PDFLib;
+    this.pdfDoc = await PDFDocument.create();
+    this.rgb = rgb;
 
-  try {
-    const uploadResponse = await fetch("/api/upload_pdf_template.php", {
-      method: "POST",
-      body: formData,
-    });
-    const uploadResult = await uploadResponse.json();
-    if (!uploadResponse.ok) throw new Error(uploadResult.error || "Okänt fel vid uppladdning.");
+    // Ladda fonter
+    await this.loadFonts();
 
-    state.currentTemplateId = uploadResult.templateId;
-    statusDiv.textContent = `Mall '${templateName}' uppladdad! (ID: ${state.currentTemplateId}). Läser fält från PDF...`;
-    statusDiv.style.color = "green";
+    // Skapa första sidan
+    this.addPage();
+  }
 
-    const reader = new FileReader();
-    reader.onload = async e => {
-      try {
-        const pdfBytes = e.target.result;
-        const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-        const form = pdfDoc.getForm();
-        const fields = form.getFields();
-        const pdfFieldNames = fields.map(f => f.getName());
+  /**
+   * Laddar fonter.
+   */
+  async loadFonts() {
+    const { StandardFonts } = window.PDFLib;
 
-        if (pdfFieldNames.length === 0) {
-          alert("Varning: Inga ifyllbara fält hittades i PDF-filen.");
-          mappingSection.style.display = "none";
-          return;
+    try {
+      // Försök ladda anpassade fonter
+      if (window.fontkit) {
+        this.pdfDoc.registerFontkit(window.fontkit);
+
+        const regularBytes = await fetch(PDF_CONFIG.fonts.regular).then(r => r.arrayBuffer());
+        this.regularFont = await this.pdfDoc.embedFont(regularBytes);
+
+        try {
+          const boldBytes = await fetch(PDF_CONFIG.fonts.bold).then(r => r.arrayBuffer());
+          this.boldFont = await this.pdfDoc.embedFont(boldBytes);
+        } catch {
+          this.boldFont = this.regularFont;
         }
 
-        await fetchMappableDbColumns(); // global via window eller importera från utils/api vid behov
-        await renderMappingTable(pdfFieldNames);
-        mappingSection.style.display = "block";
-      } catch (pdfError) {
-        console.error("Fel vid läsning av PDF-fält:", pdfError);
-        alert(`Kunde inte läsa fälten från PDF-filen: ${pdfError.message}`);
-        statusDiv.textContent = "Fel vid läsning av PDF.";
-        statusDiv.style.color = "red";
+        try {
+          const italicBytes = await fetch(PDF_CONFIG.fonts.italic).then(r => r.arrayBuffer());
+          this.italicFont = await this.pdfDoc.embedFont(italicBytes);
+        } catch {
+          this.italicFont = this.regularFont;
+        }
+      } else {
+        throw new Error("fontkit saknas");
       }
-    };
-    reader.readAsArrayBuffer(file);
-  } catch (error) {
-    console.error("Fel vid uppladdning av mall:", error);
-    statusDiv.textContent = `Fel: ${error.message}`;
-    statusDiv.style.color = "red";
-    state.currentTemplateId = null;
+    } catch (error) {
+      console.warn("[PDF] Kunde inte ladda anpassade fonter, använder fallback:", error);
+      // Använd standard-fonter
+      this.regularFont = await this.pdfDoc.embedFont(StandardFonts.Helvetica);
+      this.boldFont = await this.pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      this.italicFont = await this.pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+    }
   }
-}
 
-// Hämta DB-kolumner från servern (fallback om utils/api inte är laddad)
-async function getDbColumnsCategorized() {
-  try {
-    const res = await fetch("api/get_db_columns.php");
-    let data = await res.json();
-    if (data && typeof data === "object" && "data" in data) data = data.data;
+  /**
+   * Lägger till en ny sida.
+   */
+  addPage() {
+    this.page = this.pdfDoc.addPage([PDF_CONFIG.pageSize.width, PDF_CONFIG.pageSize.height]);
+    this.y = PDF_CONFIG.pageSize.height - PDF_CONFIG.margins.top;
+    this.pageNumber++;
+  }
 
-    if (!Array.isArray(data) && typeof data === "object") {
-      return data; // redan kategoriserat
-    } else if (Array.isArray(data)) {
-      const categorized = {};
-      data.forEach(col => {
-        const [cat] = col.split(".");
-        (categorized[cat] = categorized[cat] || []).push(col);
+  /**
+   * Kontrollerar om ny sida behövs.
+   * @param {number} neededSpace - Behövt utrymme i points
+   */
+  checkNewPage(neededSpace) {
+    if (this.y - neededSpace < PDF_CONFIG.margins.bottom) {
+      this.addPage();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Ritar text.
+   * @param {string} text - Text att rita
+   * @param {object} options - Options (x, y, size, font, color, align)
+   */
+  drawText(text, options = {}) {
+    const {
+      x = PDF_CONFIG.margins.left,
+      y = this.y,
+      size = PDF_CONFIG.fontSize.body,
+      font = this.regularFont,
+      color = PDF_CONFIG.colors.black,
+      align = "left",
+    } = options;
+
+    let drawX = x;
+
+    // Hantera alignment
+    if (align === "center") {
+      const textWidth = font.widthOfTextAtSize(text, size);
+      drawX = (PDF_CONFIG.pageSize.width - textWidth) / 2;
+    } else if (align === "right") {
+      const textWidth = font.widthOfTextAtSize(text, size);
+      drawX = PDF_CONFIG.pageSize.width - PDF_CONFIG.margins.right - textWidth;
+    }
+
+    this.page.drawText(text, {
+      x: drawX,
+      y: y,
+      size: size,
+      font: font,
+      color: this.rgb(color.r, color.g, color.b),
+    });
+
+    // Uppdatera y-position om det inte var explicit satt
+    if (!options.y) {
+      this.y -= size * 1.5;
+    }
+  }
+
+  /**
+   * Ritar flerradigt text med automatisk radbrytning.
+   * @param {string} text - Text att rita
+   * @param {object} options - Options
+   */
+  drawMultiLineText(text, options = {}) {
+    const {
+      x = PDF_CONFIG.margins.left,
+      size = PDF_CONFIG.fontSize.body,
+      font = this.regularFont,
+      color = PDF_CONFIG.colors.black,
+      maxWidth = PDF_CONFIG.pageSize.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right,
+      lineHeight = 1.5,
+    } = options;
+
+    const paragraphs = String(text || "").split("\n");
+
+    for (const paragraph of paragraphs) {
+      const words = paragraph.split(" ");
+      let currentLine = "";
+
+      for (const word of words) {
+        const testLine = currentLine + (currentLine ? " " : "") + word;
+        const testWidth = font.widthOfTextAtSize(testLine, size);
+
+        if (testWidth > maxWidth && currentLine) {
+          // Rita nuvarande rad
+          this.checkNewPage(size * lineHeight + 5);
+          this.drawText(currentLine, { x, size, font, color, y: this.y });
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+
+      // Rita sista raden i paragrafen
+      if (currentLine) {
+        this.checkNewPage(size * lineHeight + 5);
+        this.drawText(currentLine, { x, size, font, color, y: this.y });
+      }
+    }
+  }
+
+  /**
+   * Ritar en linje.
+   * @param {number} x1 - Start X
+   * @param {number} y1 - Start Y
+   * @param {number} x2 - Slut X
+   * @param {number} y2 - Slut Y
+   * @param {object} options - Options (thickness, color)
+   */
+  drawLine(x1, y1, x2, y2, options = {}) {
+    const { thickness = 1, color = PDF_CONFIG.colors.black } = options;
+
+    this.page.drawLine({
+      start: { x: x1, y: y1 },
+      end: { x: x2, y: y2 },
+      thickness: thickness,
+      color: this.rgb(color.r, color.g, color.b),
+    });
+  }
+
+  /**
+   * Ritar en rektangel.
+   * @param {number} x - X-position
+   * @param {number} y - Y-position
+   * @param {number} width - Bredd
+   * @param {number} height - Höjd
+   * @param {object} options - Options (borderColor, borderWidth, fillColor)
+   */
+  drawRectangle(x, y, width, height, options = {}) {
+    const { borderColor = PDF_CONFIG.colors.black, borderWidth = 1, fillColor = null } = options;
+
+    if (fillColor) {
+      this.page.drawRectangle({
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: this.rgb(fillColor.r, fillColor.g, fillColor.b),
       });
-      return categorized;
-    }
-    throw new Error("Oväntat format på kolumndata");
-  } catch (err) {
-    console.error("[getDbColumnsCategorized] Fel:", err);
-    alert("Kunde inte hämta databaskolumner.");
-    return {};
-  }
-}
-
-export async function renderMappingTable(pdfFields, maybeSavedMappings) {
-  const containerDiv = document.getElementById("mappingTableContainer");
-  const tbodyElm = document.querySelector("#pdfFieldMappingTable tbody");
-
-  if (!containerDiv && !tbodyElm) {
-    console.warn("[renderMappingTable] Ingen målbehållare i DOM.");
-    return;
-  }
-  if (containerDiv) containerDiv.innerHTML = "";
-  if (tbodyElm) tbodyElm.innerHTML = "";
-
-  let savedMappings = [];
-  if (Array.isArray(maybeSavedMappings) && maybeSavedMappings.length && maybeSavedMappings[0].PdfFieldName) {
-    savedMappings = maybeSavedMappings;
-  }
-  if (arguments.length === 3 && Array.isArray(arguments[2])) {
-    savedMappings = arguments[2];
-  }
-  const mappingLookup = new Map(savedMappings.map(m => [m.PdfFieldName, m.DbColumnName]));
-
-  const categorized = await getDbColumnsCategorized();
-
-  let optionsHtml = '<option value="">-- Koppla inte --</option>';
-  for (const category in categorized) {
-    if (!categorized[category].length) continue;
-    optionsHtml += `<optgroup label="${category}">`;
-    categorized[category].forEach(fullName => {
-      const label = fullName.split(".").pop();
-      optionsHtml += `<option value="${fullName}">${label}</option>`;
-    });
-    optionsHtml += "</optgroup>";
-  }
-
-  pdfFields = [...new Set(pdfFields)].sort((a, b) => a.localeCompare(b));
-
-  const writeRow = targetTbody => fld => {
-    const tr = document.createElement("tr");
-    const tdPdf = document.createElement("td");
-    tdPdf.textContent = fld;
-
-    const tdSel = document.createElement("td");
-    const sel = document.createElement("select");
-    sel.dataset.pdfField = fld;
-    sel.innerHTML = optionsHtml;
-
-    const preSel = mappingLookup.get(fld);
-    if (preSel) sel.value = preSel;
-
-    tdSel.appendChild(sel);
-    tr.append(tdPdf, tdSel);
-    targetTbody.appendChild(tr);
-  };
-
-  if (containerDiv) {
-    const table = document.createElement("table");
-    table.innerHTML = `<thead><tr><th>PDF-fält</th><th>Datakälla</th></tr></thead>`;
-    const tbody = document.createElement("tbody");
-    pdfFields.forEach(writeRow(tbody));
-    table.appendChild(tbody);
-    containerDiv.appendChild(table);
-  }
-
-  if (tbodyElm) {
-    pdfFields.forEach(writeRow(tbodyElm));
-  }
-}
-
-export async function savePdfMappings() {
-  if (!state.currentTemplateId) {
-    alert("Inget aktivt mall-ID. Ladda upp en mall först.");
-    return;
-  }
-
-  const mappingSelects = document.querySelectorAll("#mappingTableContainer select");
-  const mappings = [];
-  mappingSelects.forEach(select => {
-    const dbColumn = select.value;
-    if (dbColumn) {
-      mappings.push({ pdfField: select.dataset.pdfField, dbColumn });
-    }
-  });
-
-  if (mappings.length === 0) {
-    const go = confirm("Du har inte gjort några kopplingar. Spara tom mappning?");
-    if (!go) return;
-  }
-
-  const payload = { templateId: state.currentTemplateId, mappings };
-  try {
-    const response = await fetch("/api/save_pdf_mapping.php", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Okänt fel vid sparande av kopplingar.");
-
-    alert(result.message || "Kopplingar sparade!");
-    document.getElementById("templateNameInput").value = "";
-    document.getElementById("templateFileInput").value = "";
-    document.getElementById("pdfUploadStatus").textContent = "";
-    document.getElementById("mappingSection").style.display = "none";
-    state.currentTemplateId = null;
-    await loadAndDisplaySavedTemplates();
-  } catch (error) {
-    console.error("Fel vid sparande av kopplingar:", error);
-    alert(`Kunde inte spara kopplingar: ${error.message}`);
-  }
-}
-
-export async function editTemplate(templateId) {
-  const mappingSection = document.getElementById("mappingSection");
-  const statusDiv = document.getElementById("pdfUploadStatus");
-  const uploadBox = document.querySelector("#tab-pdf-templates .box:nth-of-type(2)");
-
-  if (uploadBox) uploadBox.style.display = "none";
-  statusDiv.innerHTML =
-    'Laddar befintlig mall och kopplingar... <button class="small secondary" onclick="cancelEditTemplate?.()">Avbryt</button>';
-  statusDiv.style.color = "orange";
-  mappingSection.style.display = "block";
-
-  try {
-    const detailsResponse = await fetch(`/api/get_pdf_template_details.php?id=${templateId}`);
-    if (!detailsResponse.ok) {
-      const errorResult = await detailsResponse.json();
-      throw new Error(errorResult.error || "Kunde inte hämta malldetaljer.");
-    }
-    const templateDetails = await detailsResponse.json();
-
-    state.currentTemplateId = templateId;
-    statusDiv.innerHTML = `Redigerar mall: <strong>"${templateDetails.templateInfo.TemplateName}"</strong>`;
-    statusDiv.style.color = "blue";
-
-    const pdfResponse = await fetch(templateDetails.templateInfo.fileUrl);
-    if (!pdfResponse.ok) throw new Error("Kunde inte hämta PDF-filen från servern.");
-    const pdfBytes = await pdfResponse.arrayBuffer();
-
-    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-    const form = pdfDoc.getForm();
-    const fields = form.getFields();
-    const pdfFieldNames = fields.map(f => f.getName());
-
-    await renderMappingTable(pdfFieldNames, templateDetails.mappings);
-    mappingSection.scrollIntoView({ behavior: "smooth" });
-  } catch (error) {
-    console.error("Fel vid redigering av mall:", error);
-    alert(`Kunde inte ladda mall för redigering: ${error.message}`);
-    state.currentTemplateId = null;
-  }
-}
-
-export async function loadAndDisplaySavedTemplates() {
-  const container = document.getElementById("savedTemplatesListContainer");
-  if (!container) return;
-
-  container.innerHTML = "<p><i>Laddar mallar...</i></p>";
-
-  try {
-    const response = await fetch("/api/get_pdf_templates.php");
-    if (!response.ok) {
-      const errorResult = await response.json();
-      throw new Error(errorResult.error || "Okänt serverfel");
-    }
-    const templates = await response.json();
-
-    if (!templates.length) {
-      container.innerHTML = "<p>Inga mallar har laddats upp ännu.</p>";
-      return;
     }
 
-    container.innerHTML = "";
-    const table = document.createElement("table");
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th>Mallnamn</th>
-          <th>Ursprungligt Filnamn</th>
-          <th>Sparades</th>
-          <th>Åtgärder</th>
-        </tr>
-      </thead>`;
-    const tbody = document.createElement("tbody");
+    if (borderWidth > 0) {
+      this.page.drawRectangle({
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        borderColor: this.rgb(borderColor.r, borderColor.g, borderColor.b),
+        borderWidth: borderWidth,
+      });
+    }
+  }
 
-    templates.forEach(template => {
-      const row = tbody.insertRow();
-      row.insertCell().textContent = template.TemplateName;
-      row.insertCell().textContent = template.OriginalFilename;
-      const date = new Date(template.CreatedAt);
-      row.insertCell().textContent = date.toLocaleDateString("sv-SE") + " " + date.toLocaleTimeString("sv-SE");
+  /**
+   * Ritar en tabell.
+   * @param {array} headers - Tabellhuvuden
+   * @param {array} rows - Tabellrader
+   * @param {object} options - Options
+   */
+  drawTable(headers, rows, options = {}) {
+    const {
+      x = PDF_CONFIG.margins.left,
+      columnWidths = null,
+      headerBg = PDF_CONFIG.colors.lightGray,
+      headerFont = this.boldFont,
+      cellFont = this.regularFont,
+      fontSize = PDF_CONFIG.fontSize.body,
+      padding = 5,
+      rowHeight = 25,
+    } = options;
 
-      const actionsCell = row.insertCell();
-      const editButton = document.createElement("button");
-      editButton.className = "small secondary";
-      editButton.textContent = "Redigera";
-      editButton.onclick = () => editTemplate(template.ID);
-      actionsCell.appendChild(editButton);
+    const tableWidth = PDF_CONFIG.pageSize.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right;
+    const numColumns = headers.length;
+    const colWidths = columnWidths || Array(numColumns).fill(tableWidth / numColumns);
 
-      const deleteButton = document.createElement("button");
-      deleteButton.className = "small danger";
-      deleteButton.textContent = "Ta bort";
-      deleteButton.onclick = () => deletePdfTemplate(template.ID, template.TemplateName);
-      actionsCell.appendChild(deleteButton);
+    // Rita headers
+    this.checkNewPage(rowHeight + 10);
+    const headerY = this.y;
+
+    // Header bakgrund
+    this.drawRectangle(x, headerY - rowHeight, tableWidth, rowHeight, {
+      fillColor: headerBg,
+      borderWidth: 1,
     });
 
-    table.appendChild(tbody);
-    container.appendChild(table);
-  } catch (error) {
-    console.error("Kunde inte ladda sparade mallar:", error);
-    container.innerHTML = `<p style="color: red;">Kunde inte ladda mallar: ${error.message}</p>`;
+    // Header text
+    let currentX = x;
+    headers.forEach((header, i) => {
+      this.drawText(header, {
+        x: currentX + padding,
+        y: headerY - rowHeight / 2 - fontSize / 2,
+        size: fontSize,
+        font: headerFont,
+      });
+      currentX += colWidths[i];
+    });
+
+    this.y = headerY - rowHeight;
+
+    // Rita rader
+    rows.forEach(row => {
+      this.checkNewPage(rowHeight + 10);
+      const rowY = this.y;
+
+      // Cell borders
+      currentX = x;
+      colWidths.forEach(width => {
+        this.drawRectangle(currentX, rowY - rowHeight, width, rowHeight, {
+          borderWidth: 1,
+        });
+        currentX += width;
+      });
+
+      // Cell text
+      currentX = x;
+      row.forEach((cell, i) => {
+        this.drawText(String(cell), {
+          x: currentX + padding,
+          y: rowY - rowHeight / 2 - fontSize / 2,
+          size: fontSize,
+          font: cellFont,
+        });
+        currentX += colWidths[i];
+      });
+
+      this.y = rowY - rowHeight;
+    });
+
+    this.y -= 10; // Extra space efter tabell
+  }
+
+  /**
+   * Lägger till sidfot med sidnummer.
+   */
+  addPageFooters() {
+    const pages = this.pdfDoc.getPages();
+    const totalPages = pages.length;
+
+    pages.forEach((page, index) => {
+      const pageNum = index + 1;
+      const text = `Sida ${pageNum} av ${totalPages}`;
+      const textWidth = this.regularFont.widthOfTextAtSize(text, PDF_CONFIG.fontSize.small);
+
+      page.drawText(text, {
+        x: PDF_CONFIG.pageSize.width - PDF_CONFIG.margins.right - textWidth,
+        y: PDF_CONFIG.margins.bottom / 2,
+        size: PDF_CONFIG.fontSize.small,
+        font: this.regularFont,
+        color: this.rgb(PDF_CONFIG.colors.gray.r, PDF_CONFIG.colors.gray.g, PDF_CONFIG.colors.gray.b),
+      });
+    });
+  }
+
+  /**
+   * Sparar och laddar ner PDF.
+   * @param {string} filename - Filnamn
+   */
+  async save(filename) {
+    // Lägg till sidfötter
+    this.addPageFooters();
+
+    // Spara PDF
+    const pdfBytes = await this.pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: "application/pdf" });
+
+    triggerDownload(blob, filename);
   }
 }
 
-export async function deletePdfTemplate(id, name = "") {
-  if (!confirm(`Ta bort mallen "${name || id}"?`)) return;
+// ============================================================
+// ÅRSRÄKNINGS-PDF
+// ============================================================
+
+/**
+ * Genererar årsräknings-PDF.
+ * @param {object} data - Årsräkningsdata
+ */
+export async function generateArsrakningPDF(data) {
+  console.log("[PDF] Genererar årsräknings-PDF...");
+
   try {
-    const res = await fetch(`/api/delete_pdf_template.php?id=${encodeURIComponent(id)}`, { method: "POST" });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || "Okänt fel vid radering.");
-    await loadAndDisplaySavedTemplates();
-  } catch (e) {
-    alert(`Kunde inte ta bort: ${e.message}`);
+    const pdf = new PDFGenerator();
+    await pdf.initialize();
+
+    const hm = window.currentHuvudmanFullData?.huvudmanDetails;
+    if (!hm) throw new Error("Ingen huvudman vald.");
+
+    // Titel
+    pdf.drawText("ÅRSRÄKNING", {
+      size: PDF_CONFIG.fontSize.title,
+      font: pdf.boldFont,
+      align: "center",
+    });
+
+    pdf.y -= 10;
+
+    // Period
+    const periodStart = data.periodStart || "";
+    const periodSlut = data.periodSlut || "";
+    pdf.drawText(`Period: ${formatDateForPdf(periodStart)} – ${formatDateForPdf(periodSlut)}`, {
+      size: PDF_CONFIG.fontSize.body,
+      align: "center",
+    });
+
+    pdf.y -= 20;
+
+    // Huvudman info
+    pdf.drawText("Huvudman", {
+      size: PDF_CONFIG.fontSize.header,
+      font: pdf.boldFont,
+    });
+    pdf.drawText(`${safe(getCaseInsensitive(hm, "FORNAMN"))} ${safe(getCaseInsensitive(hm, "EFTERNAMN"))}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+    pdf.drawText(`Personnummer: ${safe(getCaseInsensitive(hm, "PERSONNUMMER"))}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 20;
+
+    // Kassaflöde
+    pdf.drawText("Kassaflöde", {
+      size: PDF_CONFIG.fontSize.header,
+      font: pdf.boldFont,
+    });
+
+    const kassaflodeData = [
+      ["Totala inbetalningar", formatCurrency(data.totalaInbetalningar || 0)],
+      ["Totala utbetalningar", formatCurrency(data.totalaUtbetalningar || 0)],
+      ["Nettokassaflöde", formatCurrency(data.nettokassaflode || 0)],
+    ];
+
+    pdf.drawTable(["Beskrivning", "Belopp"], kassaflodeData, {
+      columnWidths: [350, 150],
+    });
+
+    // Förmögenhet
+    pdf.drawText("Förmögenhet", {
+      size: PDF_CONFIG.fontSize.header,
+      font: pdf.boldFont,
+    });
+
+    const formogenhetData = [
+      ["Vid periodens start", formatCurrency(data.formogenhetStart || 0)],
+      ["Vid periodens slut", formatCurrency(data.formogenhetSlut || 0)],
+      ["Förändring", formatCurrency(data.formogenhetForandring || 0)],
+    ];
+
+    pdf.drawTable(["Beskrivning", "Belopp"], formogenhetData, {
+      columnWidths: [350, 150],
+    });
+
+    // Spara
+    const filename = `Arsrakning_${getCaseInsensitive(hm, "PERSONNUMMER")?.replace(/\D/g, "")}_${yearForFilename(
+      periodStart
+    )}.pdf`;
+    await pdf.save(filename);
+
+    console.log("[PDF] Årsräknings-PDF genererad:", filename);
+  } catch (error) {
+    console.error("[PDF] Fel vid generering av årsräknings-PDF:", error);
+    throw error;
   }
 }
+
+// ============================================================
+// REDOGÖRELSE-PDF
+// ============================================================
+
+/**
+ * Genererar redogörelse-PDF.
+ * @param {object} data - Redogörelsedata
+ */
+export async function generateRedogorelsePDF(data) {
+  console.log("[PDF] Genererar redogörelse-PDF...");
+
+  try {
+    const pdf = new PDFGenerator();
+    await pdf.initialize();
+
+    const hm = window.currentHuvudmanFullData?.huvudmanDetails;
+    const gm = window.activeGodManProfile;
+    if (!hm || !gm) throw new Error("Huvudman eller God man-profil saknas.");
+
+    // Titel
+    pdf.drawText("REDOGÖRELSE", {
+      size: PDF_CONFIG.fontSize.title,
+      font: pdf.boldFont,
+      align: "center",
+    });
+
+    pdf.y -= 10;
+
+    // Period
+    pdf.drawText(
+      `Period: ${formatDateForPdf(data.redogKalenderarStart)} – ${formatDateForPdf(data.redogKalenderarSlut)}`,
+      {
+        align: "center",
+      }
+    );
+
+    pdf.y -= 20;
+
+    // Parter
+    pdf.drawText("1. Parter", {
+      size: PDF_CONFIG.fontSize.subheader,
+      font: pdf.boldFont,
+    });
+
+    pdf.drawText(
+      `Huvudman: ${safe(getCaseInsensitive(hm, "FORNAMN"))} ${safe(getCaseInsensitive(hm, "EFTERNAMN"))} (${safe(
+        getCaseInsensitive(hm, "PERSONNUMMER")
+      )})`,
+      {
+        x: PDF_CONFIG.margins.left + 10,
+      }
+    );
+
+    pdf.drawText(
+      `God man: ${safe(getCaseInsensitive(gm, "Fornamn"))} ${safe(getCaseInsensitive(gm, "Efternamn"))} (${safe(
+        getCaseInsensitive(gm, "Personnummer")
+      )})`,
+      {
+        x: PDF_CONFIG.margins.left + 10,
+      }
+    );
+
+    pdf.y -= 20;
+
+    // Boendeform
+    pdf.drawText("2. Huvudmannens boendeform", {
+      size: PDF_CONFIG.fontSize.subheader,
+      font: pdf.boldFont,
+    });
+
+    let boendeText = data.redogBoendeform || "Ej angivet";
+    if (data.redogBoendeform === "Annat" && data.redogBoendeAnnatText) {
+      boendeText = data.redogBoendeAnnatText;
+    }
+
+    pdf.drawText(boendeText, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 20;
+
+    // Omfattning
+    pdf.drawText("3. Uppdragets omfattning", {
+      size: PDF_CONFIG.fontSize.subheader,
+      font: pdf.boldFont,
+    });
+
+    let omfattning = [];
+    if (data.redogOmfBevakaRatt) omfattning.push("Bevaka rätt");
+    if (data.redogOmfForvaltaEgendom) omfattning.push("Förvalta egendom");
+    if (data.redogOmfSorjaForPerson) omfattning.push("Sörja för person");
+
+    pdf.drawText(`Uppdraget omfattar: ${omfattning.join(", ") || "Ej specificerat"}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 20;
+
+    // Kontakter
+    pdf.drawText("4. Kontakter och tidsinsats", {
+      size: PDF_CONFIG.fontSize.subheader,
+      font: pdf.boldFont,
+    });
+
+    pdf.drawText(`Antal besök: ${data.redogAntalBesokTyp || "Ej specificerat"}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.drawText(`Antal telefonsamtal: ${data.redogAntalTelefonsamtal || "0"}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 20;
+
+    // Underskrift
+    pdf.drawText("5. Intygande och underskrift", {
+      size: PDF_CONFIG.fontSize.subheader,
+      font: pdf.boldFont,
+    });
+
+    pdf.drawMultiLineText(
+      "Härmed intygas på heder och samvete att de uppgifter som lämnats i denna redogörelse är riktiga.",
+      {
+        x: PDF_CONFIG.margins.left + 10,
+      }
+    );
+
+    pdf.y -= 20;
+
+    const ortDatum = `${data.redogUnderskriftOrt || "___________"}, den ${formatDateForPdf(
+      data.redogUnderskriftDatum
+    )}`;
+    pdf.drawText(ortDatum, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 30;
+
+    pdf.drawText("________________________________________", {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.drawText(`${safe(getCaseInsensitive(gm, "Fornamn"))} ${safe(getCaseInsensitive(gm, "Efternamn"))}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    // Spara
+    const filename = `Redogorelse_${getCaseInsensitive(hm, "PERSONNUMMER")?.replace(/\D/g, "")}_${yearForFilename(
+      data.redogKalenderarStart
+    )}.pdf`;
+    await pdf.save(filename);
+
+    console.log("[PDF] Redogörelse-PDF genererad:", filename);
+  } catch (error) {
+    console.error("[PDF] Fel vid generering av redogörelse-PDF:", error);
+    throw error;
+  }
+}
+
+// ============================================================
+// ARVODE-PDF
+// ============================================================
+
+/**
+ * Genererar arvode-PDF.
+ * @param {object} data - Arvodedata
+ */
+export async function generateArvodePDF(data) {
+  console.log("[PDF] Genererar arvode-PDF...");
+
+  try {
+    const pdf = new PDFGenerator();
+    await pdf.initialize();
+
+    const hm = window.currentHuvudmanFullData?.huvudmanDetails;
+    const gm = window.activeGodManProfile;
+    if (!hm || !gm) throw new Error("Huvudman eller God man-profil saknas.");
+
+    // Titel
+    pdf.drawText("ARVODESBERÄKNING", {
+      size: PDF_CONFIG.fontSize.title,
+      font: pdf.boldFont,
+      align: "center",
+    });
+
+    pdf.y -= 20;
+
+    // Parter
+    pdf.drawText(
+      `Huvudman: ${safe(getCaseInsensitive(hm, "FORNAMN"))} ${safe(getCaseInsensitive(hm, "EFTERNAMN"))} (${safe(
+        getCaseInsensitive(hm, "PERSONNUMMER")
+      )})`,
+      {}
+    );
+
+    pdf.drawText(
+      `God man: ${safe(getCaseInsensitive(gm, "Fornamn"))} ${safe(getCaseInsensitive(gm, "Efternamn"))} (${safe(
+        getCaseInsensitive(gm, "Personnummer")
+      )})`,
+      {}
+    );
+
+    pdf.drawText(`Datum: ${formatDateForPdf(new Date().toISOString().slice(0, 10))}`, {});
+
+    pdf.y -= 20;
+
+    // Arvodesdelar
+    pdf.drawText("Arvode önskas för:", {
+      size: PDF_CONFIG.fontSize.subheader,
+      font: pdf.boldFont,
+    });
+
+    let arvodesDelar = [];
+    if (data.bevakaRatt) arvodesDelar.push("Bevaka rätt");
+    if (data.forvaltaEgendom) arvodesDelar.push("Förvalta egendom");
+    if (data.sorjaForPerson) arvodesDelar.push("Sörja för person");
+
+    pdf.drawText(arvodesDelar.join(", ") || "Inga delar valda", {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 10;
+
+    pdf.drawText(`Arbetsinsats: ${data.arbetsinsats || "Normal"}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 10;
+
+    pdf.drawText(`Prisbasbelopp: ${formatCurrency(data.prisbasbelopp || 0)}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 20;
+
+    // Beräkning (simplified)
+    pdf.drawText("Beräkning:", {
+      size: PDF_CONFIG.fontSize.subheader,
+      font: pdf.boldFont,
+    });
+
+    pdf.drawText(`Beräknat arvode: ${formatCurrency(data.totaltArvode || 0)}`, {
+      x: PDF_CONFIG.margins.left + 10,
+      font: pdf.boldFont,
+    });
+
+    pdf.drawText(`Kostnadsersättning: ${formatCurrency(data.totaltKostnader || 0)}`, {
+      x: PDF_CONFIG.margins.left + 10,
+    });
+
+    pdf.y -= 10;
+
+    pdf.drawText(`TOTALT: ${formatCurrency(data.totaltBelopp || 0)}`, {
+      x: PDF_CONFIG.margins.left + 10,
+      font: pdf.boldFont,
+      size: PDF_CONFIG.fontSize.header,
+    });
+
+    // Spara
+    const filename = `Arvode_${getCaseInsensitive(hm, "PERSONNUMMER")?.replace(/\D/g, "")}_${new Date()
+      .toISOString()
+      .slice(0, 10)}.pdf`;
+    await pdf.save(filename);
+
+    console.log("[PDF] Arvode-PDF genererad:", filename);
+  } catch (error) {
+    console.error("[PDF] Fel vid generering av arvode-PDF:", error);
+    throw error;
+  }
+}
+
+// ============================================================
+// EXPORTERA GLOBALT
+// ============================================================
+
+window.PDFGenerator = PDFGenerator;
+window.generateArsrakningPDF = generateArsrakningPDF;
+window.generateRedogorelsePDF = generateRedogorelsePDF;
+window.generateArvodePDF = generateArvodePDF;
+
+console.log("[PDF] pdfTemplates.js laddad.");

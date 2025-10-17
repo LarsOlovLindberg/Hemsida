@@ -53,7 +53,7 @@ try {
         'AVTALSFOrSAKRING_AFA', 'BARNBIDRAG_STUDIEBIDRAG', 'BOSTADSBIDRAG', 'ETABLERINGSERSATTNING', 'BARNS_INKOMST',
         'HYRESINTAKT_INNEBOENDE', 'LON', 'PENSION_LIVRANTA_SJUK_AKTIVITET', 'SJUKPENNING_FORALDRAPENNING',
         'SKATTEATERBARING', 'STUDIEMEDEL', 'UNDERHALLSSTOD_EFTERLEVANDEPENSION', 'VANTAD_INKOMST_BESKRIVNING',
-        'VANTAD_INKOMST_BELOPP', 'OVRIG_INKOMST_BELOPP', 'TILLGANG_BANKMEDEL_VARDE',
+        'VANTAD_INKOMST_BELOPP', 'OVRIG_INKOMST_BESKRIVNING', 'OVRIG_INKOMST_BELOPP', 'TILLGANG_BANKMEDEL_VARDE',
         'TILLGANG_BOSTADSRATT_FASTIGHET_VARDE', 'TILLGANG_FORDON_MM_VARDE', 'SKULD_KFM_VARDE', 'FORORDNANDE_DATUM',
         'SALDO_RAKNINGSKONTO_FORORDNANDE', 'HANDLAGGARE', 'KontaktpersonNamn', 'KontaktpersonTel', 'HANDLAGGARE_LSS',
         'HANDLAGGARE_SOCIAL', 'HYRESVARD_NAMN', 'BUDGET_INKOMSTER_NETTO_MANAD', 'BUDGET_UTGIFTER_VERIFIERADE_MANAD',
@@ -66,6 +66,7 @@ try {
 
     $fields = [];
     $params = [];
+    $debugLog = [];
     
     // ÄNDRING 4: Läs från $details-arrayen istället för $_POST
     foreach ($details as $key => $val) {
@@ -73,6 +74,7 @@ try {
             $paramName = ':' . $key;
             $fields[] = "`$key` = $paramName";
             $params[$paramName] = ($val === '' || $val === null) ? null : $val;
+            $debugLog[$key] = $params[$paramName];
         }
     }
     
@@ -91,6 +93,19 @@ try {
     if ($stmt->execute($params)) {
         $response['success'] = true;
         $response['message'] = 'Huvudmannens uppgifter har uppdaterats.';
+
+        try {
+            $logLine = sprintf(
+                "%s | save_huvudman_details | PNR=%s | fält=%s\n",
+                date('Y-m-d H:i:s'),
+                $pnr,
+                json_encode($debugLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            );
+            file_put_contents(__DIR__ . '/../cleanup_log.txt', $logLine, FILE_APPEND);
+        } catch (Throwable $logErr) {
+            // Ignorera loggfel men skriv till PHP-loggen för felsökning
+            error_log('save_huvudman_details debug-logg misslyckades: ' . $logErr->getMessage());
+        }
     } else {
         $errorInfo = $stmt->errorInfo();
         throw new Exception('Databasfel vid uppdatering: ' . ($errorInfo[2] ?? 'Okänt SQL-fel'));

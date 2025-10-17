@@ -118,7 +118,7 @@ require_once('api/auth_check.php');
 
 						<div class="box" id="huvudmanDetailsContainer" style="display:none;">
 							<form id="huvudmanDetailsForm">
-								<div class="collapsible-section" id="section-grunduppgifter">
+								<div class="collapsible-section" id="section-huvudman-overview">
 									<h2>
 										Detaljer för
 										<span id="huvudmanNameDisplay"></span>
@@ -172,7 +172,7 @@ require_once('api/auth_check.php');
 															</select>
 														</div>
 														<div class="input-group"><label for="forordnandeDatum">Förordnandedatum (God man):</label><input type="date" id="forordnandeDatum" /></div>
-														<div class="input-group"><label for="saldoRakningskontoForordnande">Saldo Räkningskonto (på förordnandedagen):</label><input type="number" step="0.01" id="saldoRakningskontoForordnande" placeholder="0,00" /></div>
+														<div class="input-group"><label for="saldoRakningskontoForordnande">Saldo Räkningskonto (på förordnandedagen):</label><input inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" id="saldoRakningskontoForordnande" placeholder="0,00" /></div>
 													</div>
 												</div>
 												<div style="text-align:right;margin-top:15px;">
@@ -249,10 +249,10 @@ require_once('api/auth_check.php');
 												<div class="form-grid">
 													<div class="form-column">
 														<h4>Boende</h4>
-														<div class="input-group"><label for="boendeNamn">Boende (Namn/Specifik typ):</label><input type="text" id="boendeNamn" /></div>
+														<div class="input-group"><label for="boendeNamn">Boende (Namn/Specifik typ):</label><input type="text" id="boendeNamn" name="boendeNamn" /></div>
 														<div class="input-group">
 															<label for="bostadTyp">Typ av boende (kategori):</label>
-															<select id="bostadTyp">
+															<select id="bostadTyp" name="bostadTyp">
 																<option value="">-- Välj --</option>
 																<option value="Hyresrätt">Hyresrätt</option>
 																<option value="Bostadsrätt">Bostadsrätt</option>
@@ -264,21 +264,21 @@ require_once('api/auth_check.php');
 																<option value="Annan">Annan</option>
 															</select>
 														</div>
-														<div class="input-group"><label for="bostadAntalRum">Antal rum i bostad:</label><input type="number" id="bostadAntalRum" /></div>
-														<div class="input-group"><label for="bostadAntalBoende">Antal boende i hushållet:</label><input type="number" id="bostadAntalBoende" /></div>
-														<div class="input-group"><label for="bostadKontraktstid">Kontraktstid:</label><input type="text" id="bostadKontraktstid" /></div>
+														<div class="input-group"><label for="bostadAntalRum">Antal rum i bostad:</label><input inputmode="numeric" pattern="^\d+$" id="bostadAntalRum" name="bostadAntalRum" /></div>
+														<div class="input-group"><label for="bostadAntalBoende">Antal boende i hushållet:</label><input inputmode="numeric" pattern="^\d+$" id="bostadAntalBoende" name="bostadAntalBoende" /></div>
+														<div class="input-group"><label for="bostadKontraktstid">Kontraktstid:</label><input type="text" id="bostadKontraktstid" name="bostadKontraktstid" /></div>
 													</div>
 													<div class="form-column">
 														<h4>Sysselsättning & Ekonomi</h4>
-														<div class="input-group"><label for="sysselsattning">Sysselsättning (beskrivning):</label><input type="text" id="sysselsattning" /></div>
-														<div class="input-group"><label for="inkomsttyp">Inkomsttyp (huvudsaklig):</label><input type="text" id="inkomsttyp" /></div>
-														<div class="input-group"><label for="deklareratStatus">Deklarerat (status/datum):</label><input type="text" id="deklareratStatus" /></div>
-														<div class="input-group"><label for="arvodeUtbetaltStatus">Arvode Utbetalt till Stf:</label><select id="arvodeUtbetaltStatus">
+														<div class="input-group"><label for="sysselsattning">Sysselsättning (beskrivning):</label><input type="text" id="sysselsattning" name="sysselsattning" /></div>
+														<div class="input-group"><label for="inkomsttyp">Inkomsttyp (huvudsaklig):</label><input type="text" id="inkomsttyp" name="inkomsttyp" /></div>
+														<div class="input-group"><label for="deklareratStatus">Deklarerat (status/datum):</label><input type="text" id="deklareratStatus" name="deklareratStatus" /></div>
+														<div class="input-group"><label for="arvodeUtbetaltStatus">Arvode Utbetalt till Stf:</label><select id="arvodeUtbetaltStatus" name="arvodeUtbetaltStatus">
 																<option value="">-- Välj --</option>
 																<option value="1">Ja</option>
 																<option value="0">Nej</option>
 															</select></div>
-														<div class="input-group"><label for="merkostnadsersattningStatus">Merkostnadsersättning Utgår:</label><select id="merkostnadsersattningStatus">
+														<div class="input-group"><label for="merkostnadsersattningStatus">Merkostnadsersättning Utgår:</label><select id="merkostnadsersattningStatus" name="merkostnadsersattningStatus">
 																<option value="">-- Välj --</option>
 																<option value="1">Ja</option>
 																<option value="0">Nej</option>
@@ -332,48 +332,140 @@ require_once('api/auth_check.php');
 
 													<div class="form-column">
 														<h4>Kostnader</h4>
-														<div class="input-group"><label for="hyra">Hyra/Boendekostnad:</label><input type="number" step="0.01" id="hyra" /></div>
-														<div class="input-group"><label for="elKostnad">Elkostnad:</label><input type="number" step="0.01" id="elKostnad" /></div>
-														<div class="input-group"><label for="hemforsakring">Hemförsäkring:</label><input type="number" step="0.01" id="hemforsakring" /></div>
-														<div class="input-group"><label for="reskostnader">Reskostnader (SL, Färdtjänst etc.):</label><input type="number" step="0.01" id="reskostnader" /></div>
-														<div class="input-group"><label for="fackAvgiftAkassa">Fackavgift/A-kassa:</label><input type="number" step="0.01" id="fackAvgiftAkassa" /></div>
-														<div class="input-group"><label for="medicinKostnad">Medicinkostnad:</label><input type="number" step="0.01" id="medicinKostnad" /></div>
-														<div class="input-group"><label for="lakarvardskostnad">Läkarvårdskostnad:</label><input type="number" step="0.01" id="lakarvardskostnad" /></div>
-														<div class="input-group"><label for="akutTandvardskostnad">Akut Tandvårdskostnad:</label><input type="number" step="0.01" id="akutTandvardskostnad" /></div>
-														<div class="input-group"><label for="barnomsorgAvgift">Barnomsorgsavgift:</label><input type="number" step="0.01" id="barnomsorgAvgift" /></div>
-														<div class="input-group"><label for="fardtjanstAvgift">Färdtjänstavgift:</label><input type="number" step="0.01" id="fardtjanstAvgift" /></div>
-														<div class="input-group"><label for="bredband">Bredbandskostnad:</label><input type="number" step="0.01" id="bredband" /></div>
-														<div class="input-group"><label for="ovrigKostnadBeskrivning">Övrig kostnad - Beskrivning:</label><input type="text" id="ovrigKostnadBeskrivning" /></div>
-														<div class="input-group"><label for="ovrigKostnadBelopp">Övrig kostnad - Belopp:</label><input type="number" step="0.01" id="ovrigKostnadBelopp" /></div>
+														<div class="input-group">
+														<label for="hyra">Hyra/Boendekostnad:</label>
+														<input id="hyra" name="hyra"
+																inputmode="decimal"
+																pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+
+														<div class="input-group">
+															<label for="elKostnad">Elkostnad:</label>
+															<input id="elKostnad" name="elKostnad" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="hemforsakring">Hemförsäkring:</label>
+															<input id="hemforsakring" name="hemforsakring" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="reskostnader">Reskostnader (SL, Färdtjänst etc.):</label>
+															<input id="reskostnader" name="reskostnader" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="fackAvgiftAkassa">Fackavgift/A-kassa:</label>
+															<input id="fackAvgiftAkassa" name="fackAvgiftAkassa" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="medicinKostnad">Medicinkostnad:</label>
+															<input id="medicinKostnad" name="medicinKostnad" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="lakarvardskostnad">Läkarvårdskostnad:</label>
+															<input id="lakarvardskostnad" name="lakarvardskostnad" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="akutTandvardskostnad">Akut Tandvårdskostnad:</label>
+															<input id="akutTandvardskostnad" name="akutTandvardskostnad" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="barnomsorgAvgift">Barnomsorgsavgift:</label>
+															<input id="barnomsorgAvgift" name="barnomsorgAvgift" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="fardtjanstAvgift">Färdtjänstavgift:</label>
+															<input id="fardtjanstAvgift" name="fardtjanstAvgift" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="bredband">Bredbandskostnad:</label>
+															<input id="bredband" name="bredband" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="ovrigKostnadBeskrivning">Övrig kostnad - Beskrivning:</label>
+															<input type="text" id="ovrigKostnadBeskrivning" name="ovrigKostnadBeskrivning" />
+														</div>
+														<div class="input-group">
+															<label for="ovrigKostnadBelopp">Övrig kostnad - Belopp:</label>
+															<input id="ovrigKostnadBelopp" name="ovrigKostnadBelopp" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
 														<div class="form-column">
 															<div class="input-group">
 																<label for="handlaggare">Handläggare:</label>
-																<input type="text" id="handlaggare" placeholder="Namn på handläggare">
+																<input type="text" id="handlaggare" name="handlaggare" placeholder="Namn på handläggare">
 															</div>
 														</div>
 													</div>
 
 													<div class="form-column">
 														<h4>Inkomster</h4>
-														<div class="input-group"><label for="lon">Lön:</label><input type="number" step="0.01" id="lon" /></div>
-														<div class="input-group"><label for="pensionLivrantaSjukAktivitet">Pension/Sjukers./Aktivitetsers.:</label><input type="number" step="0.01" id="pensionLivrantaSjukAktivitet" /></div>
-														<div class="input-group"><label for="sjukpenningForaldrapenning">Sjukpenning/Föräldrapenning:</label><input type="number" step="0.01" id="sjukpenningForaldrapenning" /></div>
-														<div class="input-group"><label for="arbetsloshetsersattning">Arbetslöshetsersättning:</label><input type="number" step="0.01" id="arbetsloshetsersattning" /></div>
-														<div class="input-group"><label for="bostadsbidrag">Bostadsbidrag/Bostadstillägg:</label><input type="number" step="0.01" id="bostadsbidrag" /></div>
-														<div class="input-group"><label for="barnbidragStudiebidrag">Barnbidrag/Studiebidrag:</label><input type="number" step="0.01" id="barnbidragStudiebidrag" /></div>
-														<div class="input-group"><label for="underhallsstodEfterlevandepension">Underhållsstöd/Efterlevandepension:</label><input type="number" step="0.01" id="underhallsstodEfterlevandepension" /></div>
-														<div class="input-group"><label for="etableringsersattning">Etableringsersättning:</label><input type="number" step="0.01" id="etableringsersattning" /></div>
-														<div class="input-group"><label for="avtalsforsakringAfa">Avtalsförsäkring (AFA etc.):</label><input type="number" step="0.01" id="avtalsforsakringAfa" /></div>
-														<div class="input-group"><label for="hyresintaktInneboende">Hyresintäkt (inneboende):</label><input type="number" step="0.01" id="hyresintaktInneboende" /></div>
-														<div class="input-group"><label for="barnsInkomst">Barns Inkomst:</label><input type="number" step="0.01" id="barnsInkomst" /></div>
-														<div class="input-group"><label for="skatteaterbaring">Skatteåterbäring:</label><input type="number" step="0.01" id="skatteaterbaring" /></div>
-														<div class="input-group"><label for="studiemedel">Studiemedel (bidragsdel):</label><input type="number" step="0.01" id="studiemedel" /></div>
-														<div class="input-group"><label for="vantadInkomstBeskrivning">Väntad inkomst - Beskrivning:</label><input type="text" id="vantadInkomstBeskrivning" /></div>
-														<div class="input-group"><label for="vantadInkomstBelopp">Väntad inkomst - Belopp:</label><input type="number" step="0.01" id="vantadInkomstBelopp" /></div>
-														<div class="input-group"><label for="ovrigInkomstBeskrivning">Övrig inkomst - Beskrivning:</label><input type="text" id="ovrigInkomstBeskrivning" /></div>
-														<div class="input-group"><label for="ovrigInkomstBelopp">Övrig inkomst - Belopp:</label><input type="number" step="0.01" id="ovrigInkomstBelopp" /></div>
+														<div class="input-group">
+															<label for="lon">Lön:</label>
+															<input id="lon" name="lon" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="pensionLivrantaSjukAktivitet">Pension/Sjukers./Aktivitetsers.:</label>
+															<input id="pensionLivrantaSjukAktivitet" name="pensionLivrantaSjukAktivitet" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="sjukpenningForaldrapenning">Sjukpenning/Föräldrapenning:</label>
+															<input id="sjukpenningForaldrapenning" name="sjukpenningForaldrapenning" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="arbetsloshetsersattning">Arbetslöshetsersättning:</label>
+															<input id="arbetsloshetsersattning" name="arbetsloshetsersattning" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="bostadsbidrag">Bostadsbidrag/Bostadstillägg:</label>
+															<input id="bostadsbidrag" name="bostadsbidrag" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="barnbidrag">Barnbidrag/Studiebidrag:</label>
+															<input id="barnbidrag" name="barnbidrag" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="underhallsstod">Underhållsstöd/Efterlevandepension:</label>
+															<input id="underhallsstod" name="underhallsstod" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="etableringsersattning">Etableringsersättning:</label>
+															<input id="etableringsersattning" name="etableringsersattning" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="avtalsforsakringAfa">Avtalsförsäkring (AFA etc.):</label>
+															<input id="avtalsforsakringAfa" name="avtalsforsakringAfa" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="hyresintaktInneboende">Hyresintäkt (inneboende):</label>
+															<input id="hyresintaktInneboende" name="hyresintaktInneboende" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="barnsInkomst">Barns Inkomst:</label>
+															<input id="barnsInkomst" name="barnsInkomst" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="skatteaterbaring">Skatteåterbäring:</label>
+															<input id="skatteaterbaring" name="skatteaterbaring" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="studiemedel">Studiemedel (bidragsdel):</label>
+															<input id="studiemedel" name="studiemedel" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="vantadInkomstBeskrivning">Väntad inkomst - Beskrivning:</label>
+															<input type="text" id="vantadInkomstBeskrivning" name="vantadInkomstBeskrivning" />
+														</div>
+														<div class="input-group">
+															<label for="vantadInkomstBelopp">Väntad inkomst - Belopp:</label>
+															<input id="vantadInkomstBelopp" name="vantadInkomstBelopp" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
+														<div class="input-group">
+															<label for="ovrigInkomstBeskrivning">Övrig inkomst - Beskrivning:</label>
+															<input type="text" id="ovrigInkomstBeskrivning" name="ovrigInkomstBeskrivning" />
+														</div>
+														<div class="input-group">
+															<label for="ovrigInkomstBelopp">Övrig inkomst - Belopp:</label>
+															<input id="ovrigInkomstBelopp" name="ovrigInkomstBelopp" inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" />
+														</div>
 													</div>
-
 												</div>
 												<div style="text-align:right;margin-top:15px;">
 													<button type="button" class="small secondary close-section-bottom-btn">Stäng Kostn. & Inkomst.</button>
@@ -388,13 +480,13 @@ require_once('api/auth_check.php');
 												<div class="form-grid">
 													<div class="form-column">
 														<h4>Tillgångar (ungefärliga värden)</h4>
-														<div class="input-group"><label for="tillgangBankmedelVarde">Bankmedel (totalt):</label><input type="number" step="0.01" id="tillgangBankmedelVarde" /></div>
-														<div class="input-group"><label for="tillgangBostadsrattFastighetVarde">Bostadsrätt/Fastighet:</label><input type="number" step="0.01" id="tillgangBostadsrattFastighetVarde" /></div>
-														<div class="input-group"><label for="tillgangFordonMmVarde">Fordon m.m.:</label><input type="number" step="0.01" id="tillgangFordonMmVarde" /></div>
+														<div class="input-group"><label for="tillgangBankmedelVarde">Bankmedel (totalt):</label><input inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" id="tillgangBankmedelVarde" name="tillgangBankmedelVarde" /></div>
+														<div class="input-group"><label for="tillgangBostadsrattFastighetVarde">Bostadsrätt/Fastighet:</label><input inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" id="tillgangBostadsrattFastighetVarde" name="tillgangBostadsrattFastighetVarde" /></div>
+														<div class="input-group"><label for="tillgangFordonMmVarde">Fordon m.m.:</label><input inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" id="tillgangFordonMmVarde" name="tillgangFordonMmVarde" /></div>
 													</div>
 													<div class="form-column">
 														<h4>Skulder (ungefärliga värden)</h4>
-														<div class="input-group"><label for="skuldKfmVarde">Skuld KFM:</label><input type="number" step="0.01" id="skuldKfmVarde" /></div>
+														<div class="input-group"><label for="skuldKfmVarde">Skuld KFM:</label><input inputmode="decimal" pattern="^-?\d{1,9}([,.]\d{1,2})?$" id="skuldKfmVarde" name="skuldKfmVarde" /></div>
 													</div>
 												</div>
 												<div style="text-align:right;margin-top:15px;">
@@ -1049,10 +1141,13 @@ require_once('api/auth_check.php');
 						<p>Välj huvudman på "Huvudman"-fliken. Huvudmannens generella uppgifter används. Välj sedan kommun och generera PDF.</p>
 						<div class="input-group">
 							<label>Välj kommun för ansökan:</label>
-							<button onclick="openForsorjningsstodModal('Stockholm Stad', 'Ansokan_Stockholm.pdf')">Stockholm Stad</button>
-							<button onclick="openForsorjningsstodModal('Järfälla Kommun', 'Ansokan_Jarfalla.pdf')">Järfälla Kommun</button>
-							<button onclick="openForsorjningsstodModal('Upplands Väsby', 'Ansokan_Upplands_Vasby.pdf')">Upplands Väsby</button>
-						</div>
+							<button data-template-id="6" onclick="openForsorjningsstodModal('Stockholm Stad','Ansokan_Stockholm.pdf', event)">Stockholm Stad</button>
+							<button onclick="openForsorjningsstodModal('Järfälla Kommun')">Järfälla Kommun</button>
+							<button onclick="openForsorjningsstodModal('Upplands Väsby')">Upplands Väsby</button>
+							<button onclick="openForsorjningsstodModal('Sigtuna Kommun')">Sigtuna Kommun</button>
+							<button onclick="openForsorjningsstodModal('Solna Stad')">Solna Stad</button>
+
+  						</div>
 					</div>
 				</div>
 				<div class="tab-content" id="tab-arvode">
@@ -1534,41 +1629,108 @@ require_once('api/auth_check.php');
 						</div>
 					</div>
 				</div>
-				<div id="forsorjningsstodModal" class="modal">
-					<div class="modal-content" style="max-width: 800px;"> <span class="close-button" onclick="closeForsorjningsstodModal()">×</span>
-						<h3 id="forsorjningsstodModalTitle">Granska Uppgifter för Försörjningsstöd</h3>
+				<div id="forsorjningsstodModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="forsorjningsstodModalTitle">
+					<div class="modal-content" style="max-width: 800px;">
+						<span class="close-button" onclick="closeForsorjningsstodModal()">×</span>
+
+						<h3 id="forsorjningsstodModalTitle">
+						Granska Uppgifter för Försörjningsstöd <span id="fsModalKommunNamn"></span>
+						</h3>
 						<p>Granska och komplettera uppgifterna nedan. De flesta hämtas från Huvudman-fliken.</p>
+
 						<div class="form-grid">
-							<div class="form-column">
-								<h4>Ansökningsperiod & Handläggare</h4>
-								<div class="input-group"><label for="fsModalAnsokanDatum">Ansökningsdatum:</label><input type="date" id="fsModalAnsokanDatum"></div>
-								<div class="input-group"><label for="fsModalAnsokanAvserAr">Ansökan avser år:</label><input type="number" id="fsModalAnsokanAvserAr" placeholder="ÅÅÅÅ"></div>
-								<div class="input-group"><label for="fsModalAnsokanAvserManad">Ansökan avser månad:</label><input type="text" id="fsModalAnsokanAvserManad" placeholder="T.ex. Januari"></div>
-								<div class="input-group"><label>Kommunens handläggare (om känt):</label><span id="fsVisningKommunensHandlaggare" class="display-value"></span></div>
+						<div class="form-column">
+							<h4>Ansökningsperiod & Handläggare</h4>
+							<div class="input-group">
+							<label for="fsModalAnsokanDatum">Ansökningsdatum:</label>
+							<input type="date" id="fsModalAnsokanDatum">
 							</div>
-							<div class="form-column">
-								<h4>Sökande</h4>
-								<div id="fsVisningPersonuppgifterContainer"></div>
+							<div class="input-group">
+							<label for="fsModalAnsokanAvserAr">Ansökan avser år:</label>
+							<input type="number" id="fsModalAnsokanAvserAr" placeholder="ÅÅÅÅ">
+							</div>
+							<div class="input-group">
+							<label for="fsModalAnsokanAvserManad">Ansökan avser månad:</label>
+							<input type="text" id="fsModalAnsokanAvserManad" placeholder="T.ex. januari">
+							</div>
+							<div class="input-group">
+							<label>Kommunens handläggare (om känt):</label>
+							<span id="fsVisningKommunensHandlaggare" class="display-value"></span>
 							</div>
 						</div>
-						<hr>
-						<div class="form-grid">
-							<div class="form-column">
-								<h4>Bostad</h4>
-								<div id="fsVisningBostadContainer"></div>
-							</div>
-							<div class="form-column">
-								<h4>Sysselsättning</h4>
-								<div id="fsVisningSysselsattningContainer"></div>
-							</div>
+
+						<div class="form-column">
+							<h4>Sökande</h4>
+							<div id="fsVisningPersonuppgifterContainer"></div>
 						</div>
+						</div>
+
 						<hr>
-						<div class="input-group"> <label for="fsAnsokanOvrigInfoHandlaggare_Modal">Övrig information till handläggare (specifikt för denna ansökan):</label> <textarea id="fsAnsokanOvrigInfoHandlaggare_Modal" rows="3"></textarea> </div>
-						<div id="fsVisningOvrigInfoContainer" style="padding: 5px; border: 1px dashed #ccc; margin-bottom:10px; background-color: #f9f9f9;"> <small>Generella övriga upplysningar från Huvudman-fliken visas här.</small> </div>
+
+						<div class="form-grid">
+						<div class="form-column">
+							<h4>Bostad</h4>
+							<div id="fsVisningBostadContainer"></div>
+						</div>
+						<div class="form-column">
+							<h4>Sysselsättning</h4>
+							<div id="fsVisningSysselsattningContainer"></div>
+						</div>
+						</div>
+
 						<hr>
-						<div class="modal-buttons" style="margin-top: 20px;"> <button class="secondary" onclick="closeForsorjningsstodModal()">Avbryt</button> <button onclick="genereraOchLaddaNerForsorjningsstodPdf()">Generera PDF för <span id="fsModalKommunNamnKnapp2">Kommun</span></button> </div>
+
+						<h4>Barn</h4>
+						<div id="fsVisningBarnContainer"></div>
+
+						<hr>
+
+						<h4>Typiska Inkomster</h4>
+						<div id="fsVisningInkomsterContainer"></div>
+
+						<hr>
+
+						<h4>Tillgångar</h4>
+						<div id="fsVisningTillgangarContainer"></div>
+
+						<hr>
+
+						<h4>Kostnader</h4>
+						<div id="fsVisningKostnaderContainer_Modal"></div>
+
+						<hr>
+
+						<h4>Förmåner</h4>
+						<div id="fsVisningFormanContainer"></div>
+
+						<hr>
+
+						<h4>Medgivande</h4>
+						<div id="fsVisningMedgivandeContainer"></div>
+
+						<hr>
+
+						<div class="input-group">
+						<label for="fsAnsokanOvrigInfoHandlaggare_Modal">Övrig information till handläggare (specifikt för denna ansökan):</label>
+						<textarea id="fsAnsokanOvrigInfoHandlaggare_Modal" rows="3"></textarea>
+						</div>
+
+						<div id="fsVisningOvrigInfoContainer" style="padding: 5px; border: 1px dashed #ccc; margin-bottom:10px; background-color: #f9f9f9;">
+						<small>Generella övriga upplysningar från Huvudman-fliken visas här.</small>
+						</div>
+
+						<hr>
+
+						<div class="modal-buttons" style="margin-top: 20px;">
+						<button class="secondary" type="button" onclick="closeForsorjningsstodModal()">Avbryt</button>
+						<!-- Viktigt: ny onclick -->
+						<button id="btnFsGeneratePdf" type="button" class="btn btn-success" onclick="if (!window.currentFsKommunNamn) { alert('Välj en kommun först!'); return; } onClickGenerateFsPdf()">
+							Generera PDF för <span id="fsModalKommunNamnKnapp2">Kommun</span>
+						</button>
+						</div>
 					</div>
 				</div>
+
 
 				<div id="ruleChoiceModal" class="modal">
 					<div class="modal-content" style="max-width: 550px;">
@@ -1611,11 +1773,11 @@ require_once('api/auth_check.php');
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
 	<script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
-	<script type="module" src="/js/main.js?v=<?php echo time(); ?>"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+	<!-- <script type="module" src="/js/main.js?v=<?php echo time(); ?>"></script>  -->
 	<!-- Gamla monoliten: avaktiverad -->
-	<!-- <script src="godman_logic.js?v=<?php echo time(); ?>"></script> -->
+	<script src="godman_logic.js?v=20251016_final"></script>
 </body>
 
 </html>

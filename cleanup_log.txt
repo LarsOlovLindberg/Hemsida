@@ -1,0 +1,12 @@
+﻿2025-10-17 01:34:56Z Startar stÃ¤dskript
+2025-10-17 01:34:56Z Ta bort alla *.bak-filer
+2025-10-17 01:34:56Z   Inga .bak-filer hittades
+2025-10-17 01:34:56Z Flytta databas-backuper till backups\\databases
+2025-10-17 01:34:56Z   Flyttade DB-filer: 0
+2025-10-17 01:34:56Z Ta bort dubbletter av PDF-mallar i roten
+2025-10-17 01:34:56Z   Borttagna PDF: 1
+2025-10-17 01:34:56Z Ta bort godman_logic.zip
+2025-10-17 01:34:56Z   godman_logic.zip saknades
+2025-10-17 01:34:56Z Skapa docs-mapp och flytta rapporter
+2025-10-17 01:34:56Z   Flyttade rapporter: 0
+2025-10-17 01:34:56Z StÃ¤dningen Ã¤r klar
